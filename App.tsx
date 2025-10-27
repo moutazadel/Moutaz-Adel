@@ -1,6 +1,16 @@
-
-
 import React, { useState, useMemo, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  signOut, 
+  GoogleAuthProvider, 
+  signInWithPopup,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  type User,
+  type Auth
+} from 'firebase/auth';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import type { Portfolio, Trade, Target } from './types';
 import SetupForm from './components/SetupForm';
@@ -12,6 +22,18 @@ import { EditIcon, TrashIcon } from './components/Icons';
 import EditPortfolioNameModal from './components/EditPortfolioNameModal';
 import ConfirmModal from './components/ConfirmModal';
 
+const firebaseConfig = {
+  apiKey: "AIzaSyBMHZ-r1chuf2wMqB1zhvM2ujyRVyvrllM",
+  authDomain: "moutaz-mahfaza.firebaseapp.com",
+  projectId: "moutaz-mahfaza",
+  storageBucket: "moutaz-mahfaza.firebasestorage.app",
+  messagingSenderId: "712648979777",
+  appId: "1:712648979777:web:160d9542d6f64fe3991dc0",
+  measurementId: "G-4QC62DWH9G"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
 // Fix: Moved translations to be defined within the file, as new files cannot be created.
 // This resolves the multiple default export errors and the incorrect import.
@@ -22,6 +44,7 @@ const arTranslations = {
     // Login Page
     loginTitle: 'تسجيل الدخول إلى محفظتك',
     loginWithGoogle: 'تسجيل الدخول باستخدام جوجل',
+    signUpWithGoogle: 'إنشاء حساب باستخدام جوجل',
     loginOrSeparator: 'أو',
     emailLabel: 'البريد الإلكتروني',
     emailPlaceholder: 'you@example.com',
@@ -30,6 +53,10 @@ const arTranslations = {
     signInButton: 'تسجيل الدخول',
     logoutButton: 'تسجيل الخروج',
     loginErrorEmptyFields: 'الرجاء إدخال البريد الإلكتروني وكلمة المرور.',
+    loginErrorInvalidCredentials: 'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
+    loginErrorInvalidEmail: 'البريد الإلكتروني الذي أدخلته غير صالح.',
+    loginErrorGeneric: 'حدث خطأ غير متوقع. الرجاء المحاولة مرة أخرى.',
+    authErrorUnauthorizedDomainDetailed: 'النطاق الحالي ({hostname}) غير مصرح به. يرجى إضافته إلى "النطاقات المصرّح بها" في إعدادات المصادقة بمشروع Firebase.',
     signUpTitle: 'إنشاء حساب جديد',
     signUpButton: 'إنشاء حساب',
     confirmPasswordLabel: 'تأكيد كلمة المرور',
@@ -39,6 +66,8 @@ const arTranslations = {
     signInLink: 'تسجيل الدخول',
     signUpErrorPasswordMismatch: 'كلمتا المرور غير متطابقتين.',
     signUpErrorEmptyFields: 'الرجاء ملء جميع الحقول.',
+    signUpErrorEmailInUse: 'هذا البريد الإلكتروني مستخدم بالفعل.',
+    signUpErrorWeakPassword: 'كلمة المرور ضعيفة جدًا. يجب أن تكون 6 أحرف على الأقل.',
     // HomePage
     totalCapital: 'رأس المال الإجمالي',
     allPortfolios: 'جميع المحافظ',
@@ -216,6 +245,11 @@ const arTranslations = {
     noProfitData: 'لا توجد بيانات أرباح لعرضها.',
     closeOneTradeForChart: 'أغلق صفقة واحدة على الأقل لعرض الرسم البياني.',
     profitDistributionTitle: 'توزيع الأرباح',
+    // Language
+    switchToEnglish: 'التحويل إلى الإنجليزية',
+    switchToArabic: 'التحويل إلى العربية',
+    myFirstPortfolio: 'محفظتي الأولى',
+    myPortfolio: 'محفظتي',
 };
 
 const enTranslations: Record<string, string> = {
@@ -225,6 +259,7 @@ const enTranslations: Record<string, string> = {
      // Login Page
     loginTitle: 'Sign in to your Portfolio',
     loginWithGoogle: 'Sign in with Google',
+    signUpWithGoogle: 'Sign up with Google',
     loginOrSeparator: 'OR',
     emailLabel: 'Email',
     emailPlaceholder: 'you@example.com',
@@ -233,6 +268,10 @@ const enTranslations: Record<string, string> = {
     signInButton: 'Sign In',
     logoutButton: 'Logout',
     loginErrorEmptyFields: 'Please enter both email and password.',
+    loginErrorInvalidCredentials: 'Invalid email or password.',
+    loginErrorInvalidEmail: 'The email address is not valid.',
+    loginErrorGeneric: 'An unexpected error occurred. Please try again.',
+    authErrorUnauthorizedDomainDetailed: 'The current domain ({hostname}) is not authorized. Please add it to the "Authorized domains" list in your Firebase project\'s Authentication settings.',
     signUpTitle: 'Create a New Account',
     signUpButton: 'Sign Up',
     confirmPasswordLabel: 'Confirm Password',
@@ -242,6 +281,8 @@ const enTranslations: Record<string, string> = {
     signInLink: 'Sign In',
     signUpErrorPasswordMismatch: 'Passwords do not match.',
     signUpErrorEmptyFields: 'Please fill in all fields.',
+    signUpErrorEmailInUse: 'This email is already in use.',
+    signUpErrorWeakPassword: 'Password is too weak. Must be at least 6 characters.',
     // HomePage
     totalCapital: 'Total Capital',
     allPortfolios: 'All Portfolios',
@@ -419,6 +460,11 @@ const enTranslations: Record<string, string> = {
     noProfitData: 'No profit data to display.',
     closeOneTradeForChart: 'Close at least one trade to see the chart.',
     profitDistributionTitle: 'Profit Distribution',
+    // Language
+    switchToEnglish: 'Switch to English',
+    switchToArabic: 'Switch to Arabic',
+    myFirstPortfolio: 'My First Portfolio',
+    myPortfolio: 'My Portfolio',
 };
 
 const translations = {
@@ -428,7 +474,28 @@ const translations = {
 
 type Language = 'ar' | 'en';
 
-const LanguageToggleButton: React.FC<{ language: Language, setLanguage: (lang: Language) => void }> = ({ language, setLanguage }) => {
+const getFirebaseAuthErrorMessage = (error: any, t: (key: string) => string) => {
+    switch (error.code) {
+        case 'auth/user-not-found':
+        case 'auth/wrong-password':
+        case 'auth/invalid-credential':
+            return t('loginErrorInvalidCredentials');
+        case 'auth/email-already-in-use':
+            return t('signUpErrorEmailInUse');
+        case 'auth/weak-password':
+            return t('signUpErrorWeakPassword');
+        case 'auth/invalid-email':
+            return t('loginErrorInvalidEmail');
+        case 'auth/unauthorized-domain':
+            const hostname = window.location.hostname || 'this website';
+            return t('authErrorUnauthorizedDomainDetailed').replace('{hostname}', hostname);
+        default:
+            console.error('Firebase Auth Error:', error);
+            return t('loginErrorGeneric');
+    }
+};
+
+const LanguageToggleButton: React.FC<{ language: Language, setLanguage: (lang: Language) => void, t: (key: string) => string }> = ({ language, setLanguage, t }) => {
     const toggleLanguage = () => {
         setLanguage(language === 'ar' ? 'en' : 'ar');
     };
@@ -436,7 +503,7 @@ const LanguageToggleButton: React.FC<{ language: Language, setLanguage: (lang: L
         <button
             onClick={toggleLanguage}
             className="p-2 w-12 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold"
-            aria-label={`Switch to ${language === 'ar' ? 'English' : 'Arabic'}`}
+            aria-label={language === 'ar' ? t('switchToEnglish') : t('switchToArabic')}
         >
             {language === 'ar' ? 'EN' : 'AR'}
         </button>
@@ -645,27 +712,45 @@ const HomePage: React.FC<{
     );
 }
 
-const LoginPage: React.FC<{ onLogin: () => void; t: (key: string) => string; }> = ({ onLogin, t }) => {
+const LoginPage: React.FC<{ 
+    auth: Auth; 
+    t: (key: string) => string;
+    language: Language;
+    setLanguage: (lang: Language) => void;
+    theme: 'light' | 'dark';
+    setTheme: (theme: 'light' | 'dark') => void;
+}> = ({ auth, t, language, setLanguage, theme, setTheme }) => {
     const [isLoginView, setIsLoginView] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
 
-    const handleEmailLogin = (e: React.FormEvent) => {
+    const handleGoogleLogin = async () => {
+        const provider = new GoogleAuthProvider();
+        try {
+            await signInWithPopup(auth, provider);
+        } catch (error) {
+            setError(getFirebaseAuthErrorMessage(error, t));
+        }
+    };
+
+    const handleEmailLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Mock login
         if (email.trim() && password.trim()) {
-            setError('');
-            onLogin();
+            try {
+                setError('');
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch(error) {
+                setError(getFirebaseAuthErrorMessage(error, t));
+            }
         } else {
             setError(t('loginErrorEmptyFields'));
         }
     };
     
-    const handleSignUp = (e: React.FormEvent) => {
+    const handleSignUp = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Mock sign-up
         if (!email.trim() || !password.trim() || !confirmPassword.trim()) {
             setError(t('signUpErrorEmptyFields'));
             return;
@@ -674,9 +759,12 @@ const LoginPage: React.FC<{ onLogin: () => void; t: (key: string) => string; }> 
             setError(t('signUpErrorPasswordMismatch'));
             return;
         }
-        setError('');
-        // In a real app, you'd create the user here. For now, just log in.
-        onLogin();
+        try {
+            setError('');
+            await createUserWithEmailAndPassword(auth, email, password);
+        } catch (error) {
+            setError(getFirebaseAuthErrorMessage(error, t));
+        }
     };
 
     const resetForm = () => {
@@ -692,7 +780,11 @@ const LoginPage: React.FC<{ onLogin: () => void; t: (key: string) => string; }> 
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4">
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4 relative">
+             <div className="absolute top-4 right-4 rtl:right-auto rtl:left-4 flex items-center gap-2">
+                <ThemeToggleButton theme={theme} setTheme={setTheme} />
+                <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />
+            </div>
             <div className="w-full max-w-sm">
                 <div className="text-center mb-8">
                      <h1 className="text-4xl font-bold text-cyan-600 dark:text-cyan-400">{t('appName')}</h1>
@@ -705,7 +797,7 @@ const LoginPage: React.FC<{ onLogin: () => void; t: (key: string) => string; }> 
                         <>
                             <div className="space-y-4">
                                 <button
-                                    onClick={onLogin} // Mock Google login
+                                    onClick={handleGoogleLogin}
                                     className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 font-semibold py-3 px-4 rounded-md transition duration-300 hover:bg-gray-100 dark:hover:bg-gray-600"
                                 >
                                     <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">
@@ -748,24 +840,46 @@ const LoginPage: React.FC<{ onLogin: () => void; t: (key: string) => string; }> 
                         </>
                     ) : (
                         <>
-                            <form onSubmit={handleSignUp} className="space-y-4">
-                                <div>
-                                    <label htmlFor="email-signup" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('emailLabel')}</label>
-                                    <input type="email" id="email-signup" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition" placeholder={t('emailPlaceholder')} required />
-                                </div>
-                                <div>
-                                    <label htmlFor="password-signup" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('passwordLabel')}</label>
-                                    <input type="password" id="password-signup" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition" placeholder={t('passwordPlaceholder')} required />
-                                </div>
-                                <div>
-                                    <label htmlFor="confirm-password-signup" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('confirmPasswordLabel')}</label>
-                                    <input type="password" id="confirm-password-signup" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition" placeholder={t('passwordPlaceholder')} required />
-                                </div>
-                                {error && <p className="text-red-500 dark:text-red-400 text-sm text-center pt-2">{error}</p>}
-                                <button type="submit" className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105 !mt-6">
-                                    {t('signUpButton')}
+                            <div className="space-y-4">
+                                <button
+                                    onClick={handleGoogleLogin}
+                                    className="w-full flex items-center justify-center gap-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 font-semibold py-3 px-4 rounded-md transition duration-300 hover:bg-gray-100 dark:hover:bg-gray-600"
+                                >
+                                    <svg className="w-5 h-5" viewBox="0 0 48 48" aria-hidden="true">
+                                        <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path>
+                                        <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"></path>
+                                        <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.222 0-9.582-3.443-11.115-8.102l-6.571 4.819C9.656 39.663 16.318 44 24 44z"></path>
+                                        <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.16-4.082 5.571l6.19 5.238C42.012 36.49 44 30.654 44 24c0-1.341-.138-2.65-.389-3.917z"></path>
+                                    </svg>
+                                    <span>{t('signUpWithGoogle')}</span>
                                 </button>
-                            </form>
+                                <div className="relative my-2">
+                                    <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                        <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
+                                    </div>
+                                    <div className="relative flex justify-center">
+                                        <span className="bg-white dark:bg-gray-800 px-2 text-sm text-gray-500 dark:text-gray-400">{t('loginOrSeparator')}</span>
+                                    </div>
+                                </div>
+                                <form onSubmit={handleSignUp} className="space-y-4">
+                                    <div>
+                                        <label htmlFor="email-signup" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('emailLabel')}</label>
+                                        <input type="email" id="email-signup" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition" placeholder={t('emailPlaceholder')} required />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="password-signup" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('passwordLabel')}</label>
+                                        <input type="password" id="password-signup" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition" placeholder={t('passwordPlaceholder')} required />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="confirm-password-signup" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('confirmPasswordLabel')}</label>
+                                        <input type="password" id="confirm-password-signup" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition" placeholder={t('passwordPlaceholder')} required />
+                                    </div>
+                                    {error && <p className="text-red-500 dark:text-red-400 text-sm text-center pt-2">{error}</p>}
+                                    <button type="submit" className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105 !mt-6">
+                                        {t('signUpButton')}
+                                    </button>
+                                </form>
+                            </div>
                             <p className="text-center text-sm text-gray-600 dark:text-gray-400 mt-6">
                                 {t('switchToSignIn')}{' '}
                                 <button onClick={toggleView} className="font-semibold text-cyan-600 hover:text-cyan-500 dark:text-cyan-400 dark:hover:text-cyan-300">
@@ -782,14 +896,26 @@ const LoginPage: React.FC<{ onLogin: () => void; t: (key: string) => string; }> 
 
 
 const App: React.FC = () => {
-  const [portfolios, setPortfolios] = useLocalStorage<Portfolio[]>('tradingPortfolios', []);
-  const [activePortfolioId, setActivePortfolioId] = useLocalStorage<string | null>('activePortfolioId', null);
-  const [isAuthenticated, setIsAuthenticated] = useLocalStorage<boolean>('isAuthenticated', false);
-  const [view, setView] = useLocalStorage<'home' | 'dashboard' | 'setup'>('appView', 'home');
+  const [user, setUser] = useState<User | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
+  const userSpecificKey = (baseKey: string) => user ? `${baseKey}_${user.uid}` : baseKey;
+
+  const [portfolios, setPortfolios] = useLocalStorage<Portfolio[]>(userSpecificKey('tradingPortfolios'), []);
+  const [activePortfolioId, setActivePortfolioId] = useLocalStorage<string | null>(userSpecificKey('activePortfolioId'), null);
+  const [view, setView] = useLocalStorage<'home' | 'dashboard' | 'setup'>(userSpecificKey('appView'), 'home');
   
   const [theme, setTheme] = useLocalStorage<'light' | 'dark'>('theme', 'dark');
-  const [language, setLanguage] = useLocalStorage<Language>('language', 'ar');
+  const [language, setLanguage] = useLocalStorage<Language>('language', navigator.language.startsWith('ar') ? 'ar' : 'en');
   const [isEditPortfolioNameModalOpen, setIsEditPortfolioNameModalOpen] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+        setUser(currentUser);
+        setLoadingAuth(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const activePortfolio = useMemo(() => {
       return portfolios.find(p => p.id === activePortfolioId) || null;
@@ -805,32 +931,35 @@ const App: React.FC = () => {
   };
    
   useEffect(() => {
-    // One-time migration from old single-portfolio format
-    const oldPortfolioRaw = localStorage.getItem('tradingPortfolio');
-    if (oldPortfolioRaw && portfolios.length === 0) {
-        try {
-            const oldPortfolio = JSON.parse(oldPortfolioRaw);
-            if (oldPortfolio.initialCapital > 0) { // Check if it's a valid old portfolio
-                 const newPortfolio: Portfolio = {
-                    id: Date.now().toString(),
-                    portfolioName: oldPortfolio.portfolioName || 'My First Portfolio',
-                    initialCapital: oldPortfolio.initialCapital,
-                    currency: oldPortfolio.currency || 'USD',
-                    trades: oldPortfolio.trades || [],
-                    targets: oldPortfolio.targets || (oldPortfolio.target ? [{ id: 'default', name: t('initialTargetName'), amount: oldPortfolio.target }] : [])
-                };
-                setPortfolios([newPortfolio]);
+    // One-time migration from old single-portfolio format for a logged-in user
+    if (user) {
+        const userPortfoliosKey = `tradingPortfolios_${user.uid}`;
+        const userPortfoliosRaw = localStorage.getItem(userPortfoliosKey);
+        const oldPortfolioRaw = localStorage.getItem('tradingPortfolio');
+
+        if (oldPortfolioRaw && (!userPortfoliosRaw || JSON.parse(userPortfoliosRaw).length === 0)) {
+            console.log("Migrating legacy portfolio for user:", user.uid);
+            try {
+                const oldPortfolio = JSON.parse(oldPortfolioRaw);
+                if (oldPortfolio.initialCapital > 0) {
+                     const newPortfolio: Portfolio = {
+                        id: Date.now().toString(),
+                        portfolioName: oldPortfolio.portfolioName || t('myFirstPortfolio'),
+                        initialCapital: oldPortfolio.initialCapital,
+                        currency: oldPortfolio.currency || 'USD',
+                        trades: oldPortfolio.trades || [],
+                        targets: oldPortfolio.targets || (oldPortfolio.target ? [{ id: 'default', name: t('initialTargetName'), amount: oldPortfolio.target }] : [])
+                    };
+                    setPortfolios([newPortfolio]);
+                    localStorage.removeItem('tradingPortfolio');
+                }
+            } catch (e) {
+                console.error("Failed to migrate old portfolio data:", e);
                 localStorage.removeItem('tradingPortfolio');
-                 // After migration, force user to the home screen to see the new portfolio structure
-                setView('home');
-                setActivePortfolioId(null);
             }
-        } catch (e) {
-            console.error("Failed to migrate old portfolio data:", e);
-            localStorage.removeItem('tradingPortfolio');
         }
     }
-  }, []); // Run only once on mount
+  }, [user, setPortfolios, t]);
 
   useEffect(() => {
     document.title = activePortfolio ? activePortfolio.portfolioName : t('appName');
@@ -1002,10 +1131,14 @@ const App: React.FC = () => {
       setView('home');
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setActivePortfolioId(null);
-    setView('home');
+  const handleLogout = async () => {
+    try {
+        await signOut(auth);
+        setActivePortfolioId(null);
+        setView('home');
+    } catch (error) {
+        console.error("Logout error:", error);
+    }
   };
 
   const renderContent = () => {
@@ -1052,8 +1185,23 @@ const App: React.FC = () => {
     }
   };
   
-  if (!isAuthenticated) {
-    return <LoginPage onLogin={() => setIsAuthenticated(true)} t={t} />;
+  if (loadingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-cyan-500"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage 
+                auth={auth} 
+                t={t} 
+                language={language} 
+                setLanguage={setLanguage}
+                theme={theme}
+                setTheme={setTheme}
+            />;
   }
 
   return (
@@ -1078,9 +1226,14 @@ const App: React.FC = () => {
             </div>
             <p className="text-gray-600 dark:text-gray-400 mt-2">{t('appDescription')}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
+             {user.photoURL && <img src={user.photoURL} alt={user.displayName || 'User avatar'} className="w-10 h-10 rounded-full" />}
+             <div className="hidden md:flex flex-col items-start">
+                {user.displayName && <span className="text-sm font-semibold">{user.displayName}</span>}
+                <span className="text-xs text-gray-500">{user.email}</span>
+             </div>
              <ThemeToggleButton theme={theme} setTheme={setTheme} />
-             <LanguageToggleButton language={language} setLanguage={setLanguage} />
+             <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />
              <button
                 onClick={handleLogout}
                 className="p-2 rounded-md text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 font-semibold"

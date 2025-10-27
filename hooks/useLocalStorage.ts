@@ -17,9 +17,15 @@ export function useLocalStorage<T,>(key: string, initialValue: T): [T, React.Dis
                 const merged = { ...(initialValue as object), ...stored };
 
                 // --- Data Migration ---
+                const langItem = window.localStorage.getItem('language');
+                // Default to browser language if not set, otherwise use stored value. Default to 'en' as a final fallback.
+                const lang = langItem ? JSON.parse(langItem) : (navigator.language.startsWith('ar') ? 'ar' : 'en');
+                const portfolioNameDefault = lang === 'ar' ? 'محفظتي' : 'My Portfolio';
+                const initialTargetNameDefault = lang === 'ar' ? 'الهدف الأولي' : 'Initial Target';
+
                 // Add portfolioName if it's missing from old data
                 if (typeof (merged as any).portfolioName !== 'string' || (merged as any).portfolioName.trim() === '') {
-                    (merged as any).portfolioName = 'محفظتي';
+                    (merged as any).portfolioName = portfolioNameDefault;
                 }
 
                 // Migrate single 'target: number' to 'targets: Target[]'
@@ -27,7 +33,7 @@ export function useLocalStorage<T,>(key: string, initialValue: T): [T, React.Dis
                   console.warn(`Migrating legacy 'target' to 'targets' array for key "${key}".`);
                   (merged as any).targets = [{
                     id: 'default_target',
-                    name: 'الهدف الأولي',
+                    name: initialTargetNameDefault,
                     amount: (merged as any).target
                   }];
                   delete (merged as any).target;
