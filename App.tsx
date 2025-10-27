@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -12,13 +12,13 @@ import {
   type Auth
 } from 'firebase/auth';
 import { useLocalStorage } from './hooks/useLocalStorage';
-import type { Portfolio, Trade, Target } from './types';
+import type { Portfolio, Trade, Target, UserProfile } from './types';
 import SetupForm from './components/SetupForm';
 import Dashboard from './components/Dashboard';
 import { sendNotification } from './utils/notifications';
 import { formatCurrency as formatCurrencyUtil } from './utils/formatters';
 import ThemeToggleButton from './components/ThemeToggleButton';
-import { EditIcon, TrashIcon } from './components/Icons';
+import { EditIcon, TrashIcon, UserCircleIcon } from './components/Icons';
 import EditPortfolioNameModal from './components/EditPortfolioNameModal';
 import ConfirmModal from './components/ConfirmModal';
 
@@ -251,6 +251,16 @@ const arTranslations = {
     switchToArabic: 'التحويل إلى العربية',
     myFirstPortfolio: 'محفظتي الأولى',
     myPortfolio: 'محفظتي',
+    // Profile Page
+    profile: 'الملف الشخصي',
+    profilePageTitle: 'تعديل الملف الشخصي',
+    displayNameLabel: 'الاسم المعروض',
+    phoneNumberLabel: 'رقم الهاتف',
+    changeProfilePicture: 'تغيير الصورة',
+    saveProfileChanges: 'حفظ التغييرات',
+    backToHome: 'العودة للرئيسية',
+    phonePlaceholder: 'مثال: 01012345678',
+    namePlaceholder: 'اسمك الكامل',
 };
 
 const enTranslations: Record<string, string> = {
@@ -467,6 +477,16 @@ const enTranslations: Record<string, string> = {
     switchToArabic: 'Switch to Arabic',
     myFirstPortfolio: 'My First Portfolio',
     myPortfolio: 'My Portfolio',
+    // Profile Page
+    profile: 'Profile',
+    profilePageTitle: 'Edit Profile',
+    displayNameLabel: 'Display Name',
+    phoneNumberLabel: 'Phone Number',
+    changeProfilePicture: 'Change Picture',
+    saveProfileChanges: 'Save Changes',
+    backToHome: 'Back to Home',
+    phonePlaceholder: 'e.g., 01012345678',
+    namePlaceholder: 'Your full name',
 };
 
 const translations = {
@@ -896,6 +916,130 @@ const LoginPage: React.FC<{
     );
 };
 
+const ProfilePage: React.FC<{
+    user: User;
+    profile: UserProfile;
+    onSaveProfile: (profile: UserProfile) => void;
+    onGoHome: () => void;
+    t: (key: string) => string;
+}> = ({ user, profile, onSaveProfile, onGoHome, t }) => {
+    const [displayName, setDisplayName] = useState(profile.displayName || user.displayName || '');
+    const [phoneNumber, setPhoneNumber] = useState(profile.phoneNumber || '');
+    const [photoFile, setPhotoFile] = useState<string | null>(profile.photoURL || user.photoURL || null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPhotoFile(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSaveProfile({
+            displayName,
+            phoneNumber,
+            photoURL: photoFile || '',
+        });
+        onGoHome(); // Navigate back after saving
+    };
+
+    return (
+        <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-2xl shadow-cyan-500/10 animate-fade-in">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">{t('profilePageTitle')}</h2>
+                <button onClick={onGoHome} className="text-sm text-gray-600 dark:text-gray-400 hover:text-cyan-500">{t('goHome')}</button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="flex flex-col items-center space-y-4">
+                    <div className="relative w-32 h-32">
+                        {photoFile ? (
+                            <img src={photoFile} alt="Profile" className="w-32 h-32 rounded-full object-cover border-4 border-gray-300 dark:border-gray-600" />
+                        ) : (
+                            <div className="w-32 h-32 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 flex items-center justify-center">
+                                <UserCircleIcon />
+                            </div>
+                        )}
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleImageChange}
+                            className="hidden"
+                            accept="image/png, image/jpeg"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="absolute bottom-0 right-0 rtl:right-auto rtl:left-0 bg-cyan-600 hover:bg-cyan-700 text-white p-2 rounded-full shadow-md"
+                            aria-label={t('changeProfilePicture')}
+                            title={t('changeProfilePicture')}
+                        >
+                            <EditIcon />
+                        </button>
+                    </div>
+                     <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-sm font-semibold text-cyan-600 hover:text-cyan-500 dark:text-cyan-400 dark:hover:text-cyan-300"
+                    >
+                        {t('changeProfilePicture')}
+                    </button>
+                </div>
+
+                <div>
+                    <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        {t('displayNameLabel')}
+                    </label>
+                    <input
+                        type="text"
+                        id="displayName"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
+                        placeholder={t('namePlaceholder')}
+                    />
+                </div>
+
+                <div>
+                    <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        {t('phoneNumberLabel')}
+                    </label>
+                    <input
+                        type="tel"
+                        id="phoneNumber"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
+                        placeholder={t('phonePlaceholder')}
+                    />
+                </div>
+
+                <div className="flex justify-end gap-4 pt-4">
+                     <button
+                        type="button"
+                        onClick={onGoHome}
+                        className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-md transition"
+                    >
+                        {t('cancel')}
+                    </button>
+                    <button
+                        type="submit"
+                        className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-6 rounded-md transition"
+                    >
+                        {t('saveProfileChanges')}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
 
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -905,19 +1049,47 @@ const App: React.FC = () => {
 
   const [portfolios, setPortfolios] = useLocalStorage<Portfolio[]>(userSpecificKey('tradingPortfolios'), []);
   const [activePortfolioId, setActivePortfolioId] = useLocalStorage<string | null>(userSpecificKey('activePortfolioId'), null);
-  const [view, setView] = useLocalStorage<'home' | 'dashboard' | 'setup'>(userSpecificKey('appView'), 'home');
+  const [view, setView] = useLocalStorage<'home' | 'dashboard' | 'setup' | 'profile'>(userSpecificKey('appView'), 'home');
   
   const [theme, setTheme] = useLocalStorage<'light' | 'dark'>('theme', 'dark');
   const [language, setLanguage] = useLocalStorage<Language>('language', navigator.language.startsWith('ar') ? 'ar' : 'en');
   const [isEditPortfolioNameModalOpen, setIsEditPortfolioNameModalOpen] = useState(false);
+  
+  const [userProfile, setUserProfile] = useLocalStorage<UserProfile>(userSpecificKey('userProfile'), {
+    displayName: '',
+    phoneNumber: '',
+    photoURL: '',
+  });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
         setUser(currentUser);
+        if (currentUser) {
+            const key = `userProfile_${currentUser.uid}`;
+            try {
+                const storedProfileRaw = localStorage.getItem(key);
+                const storedProfile = storedProfileRaw ? JSON.parse(storedProfileRaw) : null;
+                // If no profile is stored, or if it's stored but has no name (initial state), then populate from Auth provider.
+                if (!storedProfile || !storedProfile.displayName) { 
+                    setUserProfile({
+                        displayName: currentUser.displayName || '',
+                        phoneNumber: currentUser.phoneNumber || '',
+                        photoURL: currentUser.photoURL || '',
+                    });
+                }
+            } catch(e) {
+                // Handle potential JSON parsing error if data is corrupt
+                 setUserProfile({
+                    displayName: currentUser.displayName || '',
+                    phoneNumber: currentUser.phoneNumber || '',
+                    photoURL: currentUser.photoURL || '',
+                });
+            }
+        }
         setLoadingAuth(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, []); // Intentionally empty to run once.
 
   const activePortfolio = useMemo(() => {
       return portfolios.find(p => p.id === activePortfolioId) || null;
@@ -1142,6 +1314,10 @@ const App: React.FC = () => {
         console.error("Logout error:", error);
     }
   };
+  
+  const handleSaveProfile = (profile: UserProfile) => {
+    setUserProfile(profile);
+  };
 
   const renderContent = () => {
     switch (view) {
@@ -1173,6 +1349,14 @@ const App: React.FC = () => {
             // Fallback if active portfolio is not found
             setView('home');
             return null;
+        case 'profile':
+            return <ProfilePage 
+                        user={user!} 
+                        profile={userProfile} 
+                        onSaveProfile={handleSaveProfile} 
+                        onGoHome={handleGoHome} 
+                        t={t} 
+                    />;
         case 'home':
         default:
              return <HomePage 
@@ -1206,6 +1390,8 @@ const App: React.FC = () => {
             />;
   }
 
+  const profilePhoto = userProfile?.photoURL || user.photoURL;
+
   return (
     <div className="bg-gray-100 dark:bg-gray-900 min-h-screen text-gray-800 dark:text-white antialiased transition-colors duration-300">
       <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -1229,10 +1415,22 @@ const App: React.FC = () => {
             <p className="text-gray-600 dark:text-gray-400 mt-2">{t('appDescription')}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-             {user.photoURL && <img src={user.photoURL} alt={user.displayName || 'User avatar'} className="w-10 h-10 rounded-full" />}
-             <div className="hidden md:flex flex-col items-start">
-                {user.displayName && <span className="text-sm font-semibold">{user.displayName}</span>}
-                <span className="text-xs text-gray-500">{user.email}</span>
+             <div 
+                className="flex items-center gap-2 cursor-pointer p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700/50"
+                onClick={() => setView('profile')}
+                title={t('profile')}
+             >
+                {profilePhoto ? (
+                    <img src={profilePhoto} alt={userProfile?.displayName || user.displayName || 'User avatar'} className="w-10 h-10 rounded-full object-cover" />
+                ) : (
+                    <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-700 text-gray-500 flex items-center justify-center">
+                        <UserCircleIcon />
+                    </div>
+                )}
+                <div className="hidden md:flex flex-col items-start">
+                    <span className="text-sm font-semibold">{userProfile?.displayName || user.displayName}</span>
+                    <span className="text-xs text-gray-500">{user.email}</span>
+                </div>
              </div>
              <ThemeToggleButton theme={theme} setTheme={setTheme} />
              <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />

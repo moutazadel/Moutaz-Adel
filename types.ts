@@ -29,3 +29,9 @@ export interface Portfolio {
   trades: Trade[];
   currency: string;
 }
+
+export interface UserProfile {
+  displayName: string;
+  phoneNumber: string;
+  photoURL: string; // Can be a URL from Google or a Base64 string from upload
+}
