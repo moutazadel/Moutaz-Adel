@@ -127,7 +127,7 @@ const arTranslations = {
     // AddTradeForm
     newTradeTitle: 'فتح صفقة جديدة',
     assetNameLabel: 'اسم السهم',
-    assetNamePlaceholder: 'مثال: AAPL, BTC',
+    assetNamePlaceholder: 'ابحث عن سهم EGX...',
     entryPriceLabel: 'سعر الشراء',
     entryPricePlaceholder: '150.5',
     tradeValueLabel: 'قيمة الصفقة',
@@ -146,6 +146,7 @@ const arTranslations = {
     addTradeErrorSL: 'الرجاء إدخال سعر وقف خسارة رقمي موجب.',
     addTradeErrorTPGreater: 'يجب أن يكون سعر البيع (TP) أعلى من سعر الشراء.',
     addTradeErrorSLLess: 'يجب أن يكون سعر وقف الخسارة (SL) أقل من سعر الشراء.',
+    previouslyTradedStock: 'سهم متداول سابقاً',
     // TradeList
     openTrades: 'الصفقات المفتوحة',
     noOpenTrades: 'لا توجد صفقات مفتوحة حاليًا.',
@@ -342,7 +343,7 @@ const enTranslations: Record<string, string> = {
     // AddTradeForm
     newTradeTitle: 'Open a New Trade',
     assetNameLabel: 'Asset Name',
-    assetNamePlaceholder: 'e.g., AAPL, BTC',
+    assetNamePlaceholder: 'Search for an EGX stock...',
     entryPriceLabel: 'Entry Price',
     entryPricePlaceholder: '150.5',
     tradeValueLabel: 'Trade Value',
@@ -361,6 +362,7 @@ const enTranslations: Record<string, string> = {
     addTradeErrorSL: 'Please enter a positive numeric stop loss price.',
     addTradeErrorTPGreater: 'Take Profit price must be higher than entry price.',
     addTradeErrorSLLess: 'Stop Loss price must be lower than entry price.',
+    previouslyTradedStock: 'Previously Traded Stock',
     // TradeList
     openTrades: 'Open Trades',
     noOpenTrades: 'No open trades at the moment.',
