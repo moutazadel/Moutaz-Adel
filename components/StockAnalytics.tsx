@@ -1,8 +1,8 @@
 
+
 import React, { useMemo } from 'react';
 import type { Trade } from '../types';
 import { ChartIcon, DollarIcon, TargetIcon, TrendingDownIcon, TrendingUpIcon } from './Icons';
-import StatCard from './StatCard';
 import StockPerformanceChart from './StockPerformanceChart';
 import ProfitPieChart from './ProfitPieChart';
 import CapitalPieChart from './CapitalPieChart';
@@ -27,6 +27,28 @@ interface StockStat {
   avgWin: number;
   avgLoss: number;
 }
+
+// A small local component for displaying a single stat, matching the screenshot style.
+const StatItem: React.FC<{ title: string; value: string; icon: React.ReactNode; isPositive?: boolean }> = ({ title, value, icon, isPositive }) => {
+  const valueColor = isPositive === undefined
+    ? 'text-cyan-400'
+    : isPositive
+    ? 'text-green-400'
+    : 'text-red-400';
+
+  return (
+    <div className="flex items-center justify-between">
+      <div className="text-right">
+        <h4 className="text-sm text-gray-400">{title}</h4>
+        <p className={`text-lg font-bold ${valueColor}`} dir="ltr">{value}</p>
+      </div>
+      <div className="bg-gray-700/50 p-3 rounded-lg">
+        {icon}
+      </div>
+    </div>
+  );
+};
+
 
 const StockAnalytics: React.FC<StockAnalyticsProps> = ({ trades, onNavigateToDashboard, initialCapital, currentCapital, t, formatCurrency }) => {
 
@@ -126,13 +148,13 @@ const StockAnalytics: React.FC<StockAnalyticsProps> = ({ trades, onNavigateToDas
               <div key={stock.assetName} className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-lg flex flex-col">
                 <div>
                   <h3 className="text-2xl font-bold text-center text-yellow-500 dark:text-yellow-400 border-b-2 border-gray-200 dark:border-gray-700 pb-2">{stock.assetName}</h3>
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <StatCard title={t('netProfitLoss')} value={formatCurrency(stock.netProfit)} icon={<DollarIcon />} isPositive={stock.netProfit >= 0} />
-                    <StatCard title={t('totalClosedTrades')} value={stock.totalTrades.toString()} icon={<ChartIcon />} />
-                    <StatCard title={t('winRate')} value={`${stock.winRate.toFixed(1)}%`} icon={<TargetIcon />} />
-                    <StatCard title={t('winsLosses')} value={`${stock.wins} / ${stock.losses}`} icon={stock.wins >= stock.losses ? <TrendingUpIcon/> : <TrendingDownIcon/>} isPositive={stock.wins >= stock.losses}/>
-                    <StatCard title={t('avgWin')} value={formatCurrency(stock.avgWin)} icon={<TrendingUpIcon />} isPositive={true} />
-                    <StatCard title={t('avgLoss')} value={formatCurrency(stock.avgLoss)} icon={<TrendingDownIcon />} isPositive={false} />
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-6 mt-4">
+                    <StatItem title={t('netProfitLoss')} value={formatCurrency(stock.netProfit)} icon={<DollarIcon />} isPositive={stock.netProfit >= 0} />
+                    <StatItem title={t('totalClosedTrades')} value={stock.totalTrades.toString()} icon={<ChartIcon />} />
+                    <StatItem title={t('winRate')} value={`${stock.winRate.toFixed(1)}%`} icon={<TargetIcon />} />
+                    <StatItem title={t('winsLosses')} value={`${stock.wins} / ${stock.losses}`} icon={stock.wins >= stock.losses ? <TrendingUpIcon/> : <TrendingDownIcon/>} isPositive={stock.wins >= stock.losses}/>
+                    <StatItem title={t('avgWin')} value={formatCurrency(stock.avgWin)} icon={<TrendingUpIcon />} isPositive={true} />
+                    <StatItem title={t('avgLoss')} value={formatCurrency(stock.avgLoss)} icon={<TrendingDownIcon />} isPositive={false} />
                   </div>
                 </div>
 
