@@ -3,10 +3,11 @@ import ConfirmModal from './ConfirmModal';
 
 interface SetupFormProps {
   onSetup: (portfolioName: string, initialCapital: number, targetAmount: number, currency: string) => void;
+  onCancel?: () => void;
   t: (key: string) => string;
 }
 
-const SetupForm: React.FC<SetupFormProps> = ({ onSetup, t }) => {
+const SetupForm: React.FC<SetupFormProps> = ({ onSetup, onCancel, t }) => {
   const [portfolioName, setPortfolioName] = useState('');
   const [initialCapital, setInitialCapital] = useState('');
   const [target, setTarget] = useState('');
@@ -107,12 +108,23 @@ const SetupForm: React.FC<SetupFormProps> = ({ onSetup, t }) => {
             />
           </div>
           {error && <p className="text-red-500 dark:text-red-400 text-sm">{error}</p>}
-          <button
-            type="submit"
-            className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
-          >
-            {t('startButton')}
-          </button>
+          <div className="flex items-center gap-4 pt-2">
+              {onCancel && (
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-md transition"
+                >
+                    {t('cancel')}
+                </button>
+              )}
+              <button
+                type="submit"
+                className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-md transition duration-300 ease-in-out transform hover:scale-105"
+              >
+                {t('startButton')}
+              </button>
+          </div>
         </form>
       </div>
       <ConfirmModal

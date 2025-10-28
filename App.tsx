@@ -1006,19 +1006,31 @@ const ProfilePage: React.FC<{
     t: (key: string) => string;
     language: Language;
 }> = ({ user, profile, onUpdate, onBack, t, language }) => {
-    // Definitive Fix: Initialize state from props ONCE. This component now "owns" the form state.
-    // It will not be overwritten by parent re-renders, fixing the data loss bug.
     const [formData, setFormData] = useState<ProfileFormData>({
-        displayName: profile?.displayName || '',
-        address: profile?.address || '',
-        phoneNumber: profile?.phoneNumber || '',
-        country: profile?.country || '',
-        city: profile?.city || '',
+        displayName: '', address: '', phoneNumber: '', country: '', city: '',
     });
     const [imageFile, setImageFile] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(profile?.photoURL || null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    // Definitive Fix: This useEffect hook correctly synchronizes the form's internal state
+    // with the profile data that is loaded asynchronously from Firestore.
+    // This ensures the form is always populated with the latest data, fixing the bug
+    // where the form would be empty if the data arrived after the initial render.
+    useEffect(() => {
+        if (profile) {
+            setFormData({
+                displayName: profile.displayName || '',
+                address: profile.address || '',
+                phoneNumber: profile.phoneNumber || '',
+                country: profile.country || '',
+                city: profile.city || '',
+            });
+            setImagePreview(profile.photoURL || null);
+        }
+    }, [profile]);
+
 
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { id, value } = e.target;
@@ -1301,6 +1313,7 @@ function App() {
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null);
   const [view, setView] = useState<'home' | 'profile' | 'expenses'>('home');
+  const [isAddingPortfolio, setIsAddingPortfolio] = useState(false);
 
   const t = useCallback((key: string): string => {
     const translation = translations[language][key] || translations['en'][key];
@@ -1470,6 +1483,7 @@ function App() {
     setPortfolios(updatedPortfolios);
     savePortfoliosToFirestore(updatedPortfolios);
     setActivePortfolioId(newPortfolio.id);
+    setIsAddingPortfolio(false);
   };
   
   const handleUpdatePortfolios = (updatedPortfolio: Portfolio) => {
@@ -1479,7 +1493,9 @@ function App() {
   };
   
   const handleAddNewPortfolio = () => {
-      setActivePortfolioId(null);
+    setIsAddingPortfolio(true);
+    setActivePortfolioId(null);
+    setView('home');
   };
 
   const handleDeletePortfolio = (id: string) => {
@@ -1510,16 +1526,19 @@ function App() {
   const goHome = () => {
     setView('home');
     setActivePortfolioId(null);
+    setIsAddingPortfolio(false);
   };
 
   const handleNavigateToPortfolio = (id: string) => {
     setView('home');
     setActivePortfolioId(id);
+    setIsAddingPortfolio(false);
   }
   
   const handleNavigateToExpenses = () => {
       setView('expenses');
       setActivePortfolioId(null);
+      setIsAddingPortfolio(false);
   }
 
   const renderContent = () => {
@@ -1530,11 +1549,137 @@ function App() {
           return <ExpensesPage onBack={goHome} />;
       case 'home':
       default:
-        if (!activePortfolio) {
-          return portfolios.length === 0 ? (
-            <SetupForm onSetup={handleSetup} t={t} />
-          ) : (
-            <HomePage 
+        if (isAddingPortfolio || (portfolios.length === 0 && !activePortfolioId)) {
+            return <SetupForm onSetup={handleSetup} t={t} onCancel={portfolios.length > 0 ? () => setIsAddingPortfolio(false) : undefined} />;
+        }
+        
+        if (activePortfolio) {
+             const closedTrades = activePortfolio.trades.filter(trade => trade.status === 'closed');
+            const currentCapital = closedTrades.reduce((acc, trade) => acc + trade.pnl, activePortfolio.initialCapital);
+            const historicalAssets = Array.from(new Set(activePortfolio.trades.map(t => t.assetName)));
+            
+            const handleAddTrade = (tradeData: Omit<Trade, 'id' | 'capitalBeforeTrade' | 'status' | 'pnl' | 'openDate' | 'closeDate'>) => {
+              const newTrade: Trade = {
+                ...tradeData,
+                id: Date.now().toString(),
+                status: 'open',
+                pnl: 0,
+                capitalBeforeTrade: currentCapital,
+                openDate: Date.now(),
+              };
+              const updatedPortfolio = { ...activePortfolio, trades: [...activePortfolio.trades, newTrade] };
+              handleUpdatePortfolios(updatedPortfolio);
+            };
+
+            const handleCloseTrade = (tradeId: string, finalPnl: number) => {
+              const updatedTrades = activePortfolio.trades.map(trade => 
+                trade.id === tradeId ? { ...trade, status: 'closed', pnl: finalPnl, closeDate: Date.now() } : trade
+              );
+              const updatedPortfolio = { ...activePortfolio, trades: updatedTrades };
+              handleUpdatePortfolios(updatedPortfolio);
+
+              const closedTrade = updatedTrades.find(t => t.id === tradeId);
+              if (closedTrade) {
+                const pnlFormatted = formatCurrency(finalPnl);
+                let title, body;
+                if (finalPnl > 0) {
+                  title = t('notificationWinTitle');
+                  body = t('notificationWinBody').replace('{assetName}', closedTrade.assetName).replace('{pnl}', pnlFormatted);
+                } else if (finalPnl < 0) {
+                  title = t('notificationLossTitle');
+                  body = t('notificationLossBody').replace('{assetName}', closedTrade.assetName).replace('{pnl}', pnlFormatted);
+                } else {
+                  title = t('notificationBreakevenTitle');
+                  body = t('notificationBreakevenBody').replace('{assetName}', closedTrade.assetName);
+                }
+                sendNotification(title, { body });
+              }
+            };
+            
+            const handleUpdateTrade = (tradeId: string, updates: Partial<Pick<Trade, 'entryPrice' | 'tradeValue' | 'takeProfitPrice' | 'stopLossPrice' | 'notes'>>) => {
+                const updatedTrades = activePortfolio.trades.map(trade => {
+                    if (trade.id === tradeId) {
+                        const updatedTrade = { ...trade, ...updates };
+                        // Recalculate TP/SL amounts if prices changed
+                        if (updates.entryPrice !== undefined || updates.tradeValue !== undefined || updates.takeProfitPrice !== undefined || updates.stopLossPrice !== undefined) {
+                            const entryPrice = updatedTrade.entryPrice;
+                            const tradeValue = updatedTrade.tradeValue;
+                            const takeProfitPrice = updatedTrade.takeProfitPrice;
+                            const stopLossPrice = updatedTrade.stopLossPrice;
+                            const numberOfShares = tradeValue / entryPrice;
+                            updatedTrade.takeProfit = (takeProfitPrice - entryPrice) * numberOfShares;
+                            updatedTrade.stopLoss = (entryPrice - stopLossPrice) * numberOfShares;
+                        }
+                        return updatedTrade;
+                    }
+                    return trade;
+                });
+                handleUpdatePortfolios({ ...activePortfolio, trades: updatedTrades });
+            };
+            
+            const handleDeleteTrade = (tradeId: string) => {
+              const updatedTrades = activePortfolio.trades.filter(trade => trade.id !== tradeId);
+              const updatedPortfolio = { ...activePortfolio, trades: updatedTrades };
+              handleUpdatePortfolios(updatedPortfolio);
+            };
+            
+            const handleDeleteCurrentPortfolio = () => {
+                handleDeletePortfolio(activePortfolio.id);
+            };
+
+            const handleExportCSV = () => {
+              const headers = ['#', t('assetHeader'), t('dateHeader'), `${t('pnlHeader')} (${activePortfolio.currency})`, t('percentageHeader'), t('notesLabel')];
+              const rows = closedTrades.map((trade, index) => [
+                closedTrades.length - index,
+                trade.assetName,
+                trade.closeDate ? new Date(trade.closeDate).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US') : '-',
+                trade.pnl,
+                trade.tradeValue > 0 ? ((trade.pnl / trade.tradeValue) * 100).toFixed(2) : '0.00',
+                trade.notes || ''
+              ]);
+              const csvContent = "data:text/csv;charset=utf-8," 
+                + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+              
+              const link = document.createElement("a");
+              link.setAttribute("href", encodeURI(csvContent));
+              link.setAttribute("download", `${activePortfolio.portfolioName}_trades.csv`);
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            };
+            
+            const handleUpdateTargets = (newTargets: Target[]) => {
+                handleUpdatePortfolios({ ...activePortfolio, targets: newTargets });
+            };
+
+            const handleUpdateInitialCapital = (newCapital: number) => {
+                handleUpdatePortfolios({ ...activePortfolio, initialCapital: newCapital });
+            };
+
+            return (
+              <Dashboard
+                portfolio={activePortfolio}
+                currentCapital={currentCapital}
+                closedTrades={closedTrades}
+                historicalAssets={historicalAssets}
+                onAddTrade={handleAddTrade}
+                onCloseTrade={handleCloseTrade}
+                onUpdateTrade={handleUpdateTrade}
+                onDeleteTrade={handleDeleteTrade}
+                onDeletePortfolio={handleDeleteCurrentPortfolio}
+                onExportCSV={handleExportCSV}
+                onUpdateTargets={handleUpdateTargets}
+                onUpdateInitialCapital={handleUpdateInitialCapital}
+                onGoHome={goHome}
+                t={t}
+                language={language}
+                formatCurrency={(amount) => formatCurrency(amount, activePortfolio.currency)}
+              />
+            );
+        }
+
+        return (
+             <HomePage 
               portfolios={portfolios} 
               onSelectPortfolio={setActivePortfolioId} 
               onAddNewPortfolio={handleAddNewPortfolio}
@@ -1543,130 +1688,6 @@ function App() {
               language={language} 
               formatCurrency={formatCurrency}
             />
-          );
-        }
-        
-        const closedTrades = activePortfolio.trades.filter(trade => trade.status === 'closed');
-        const currentCapital = closedTrades.reduce((acc, trade) => acc + trade.pnl, activePortfolio.initialCapital);
-        const historicalAssets = Array.from(new Set(activePortfolio.trades.map(t => t.assetName)));
-        
-        const handleAddTrade = (tradeData: Omit<Trade, 'id' | 'capitalBeforeTrade' | 'status' | 'pnl' | 'openDate' | 'closeDate'>) => {
-          const newTrade: Trade = {
-            ...tradeData,
-            id: Date.now().toString(),
-            status: 'open',
-            pnl: 0,
-            capitalBeforeTrade: currentCapital,
-            openDate: Date.now(),
-          };
-          const updatedPortfolio = { ...activePortfolio, trades: [...activePortfolio.trades, newTrade] };
-          handleUpdatePortfolios(updatedPortfolio);
-        };
-
-        const handleCloseTrade = (tradeId: string, finalPnl: number) => {
-          const updatedTrades = activePortfolio.trades.map(trade => 
-            trade.id === tradeId ? { ...trade, status: 'closed', pnl: finalPnl, closeDate: Date.now() } : trade
-          );
-          const updatedPortfolio = { ...activePortfolio, trades: updatedTrades };
-          handleUpdatePortfolios(updatedPortfolio);
-
-          const closedTrade = updatedTrades.find(t => t.id === tradeId);
-          if (closedTrade) {
-            const pnlFormatted = formatCurrency(finalPnl);
-            let title, body;
-            if (finalPnl > 0) {
-              title = t('notificationWinTitle');
-              body = t('notificationWinBody').replace('{assetName}', closedTrade.assetName).replace('{pnl}', pnlFormatted);
-            } else if (finalPnl < 0) {
-              title = t('notificationLossTitle');
-              body = t('notificationLossBody').replace('{assetName}', closedTrade.assetName).replace('{pnl}', pnlFormatted);
-            } else {
-              title = t('notificationBreakevenTitle');
-              body = t('notificationBreakevenBody').replace('{assetName}', closedTrade.assetName);
-            }
-            sendNotification(title, { body });
-          }
-        };
-        
-        const handleUpdateTrade = (tradeId: string, updates: Partial<Pick<Trade, 'entryPrice' | 'tradeValue' | 'takeProfitPrice' | 'stopLossPrice' | 'notes'>>) => {
-            const updatedTrades = activePortfolio.trades.map(trade => {
-                if (trade.id === tradeId) {
-                    const updatedTrade = { ...trade, ...updates };
-                    // Recalculate TP/SL amounts if prices changed
-                    if (updates.entryPrice !== undefined || updates.tradeValue !== undefined || updates.takeProfitPrice !== undefined || updates.stopLossPrice !== undefined) {
-                        const entryPrice = updatedTrade.entryPrice;
-                        const tradeValue = updatedTrade.tradeValue;
-                        const takeProfitPrice = updatedTrade.takeProfitPrice;
-                        const stopLossPrice = updatedTrade.stopLossPrice;
-                        const numberOfShares = tradeValue / entryPrice;
-                        updatedTrade.takeProfit = (takeProfitPrice - entryPrice) * numberOfShares;
-                        updatedTrade.stopLoss = (entryPrice - stopLossPrice) * numberOfShares;
-                    }
-                    return updatedTrade;
-                }
-                return trade;
-            });
-            handleUpdatePortfolios({ ...activePortfolio, trades: updatedTrades });
-        };
-        
-        const handleDeleteTrade = (tradeId: string) => {
-          const updatedTrades = activePortfolio.trades.filter(trade => trade.id !== tradeId);
-          const updatedPortfolio = { ...activePortfolio, trades: updatedTrades };
-          handleUpdatePortfolios(updatedPortfolio);
-        };
-        
-        const handleDeleteCurrentPortfolio = () => {
-            handleDeletePortfolio(activePortfolio.id);
-        };
-
-        const handleExportCSV = () => {
-          const headers = ['#', t('assetHeader'), t('dateHeader'), `${t('pnlHeader')} (${activePortfolio.currency})`, t('percentageHeader'), t('notesLabel')];
-          const rows = closedTrades.map((trade, index) => [
-            closedTrades.length - index,
-            trade.assetName,
-            trade.closeDate ? new Date(trade.closeDate).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US') : '-',
-            trade.pnl,
-            trade.tradeValue > 0 ? ((trade.pnl / trade.tradeValue) * 100).toFixed(2) : '0.00',
-            trade.notes || ''
-          ]);
-          const csvContent = "data:text/csv;charset=utf-8," 
-            + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-          
-          const link = document.createElement("a");
-          link.setAttribute("href", encodeURI(csvContent));
-          link.setAttribute("download", `${activePortfolio.portfolioName}_trades.csv`);
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        };
-        
-        const handleUpdateTargets = (newTargets: Target[]) => {
-            handleUpdatePortfolios({ ...activePortfolio, targets: newTargets });
-        };
-
-        const handleUpdateInitialCapital = (newCapital: number) => {
-            handleUpdatePortfolios({ ...activePortfolio, initialCapital: newCapital });
-        };
-
-        return (
-          <Dashboard
-            portfolio={activePortfolio}
-            currentCapital={currentCapital}
-            closedTrades={closedTrades}
-            historicalAssets={historicalAssets}
-            onAddTrade={handleAddTrade}
-            onCloseTrade={handleCloseTrade}
-            onUpdateTrade={handleUpdateTrade}
-            onDeleteTrade={handleDeleteTrade}
-            onDeletePortfolio={handleDeleteCurrentPortfolio}
-            onExportCSV={handleExportCSV}
-            onUpdateTargets={handleUpdateTargets}
-            onUpdateInitialCapital={handleUpdateInitialCapital}
-            onGoHome={goHome}
-            t={t}
-            language={language}
-            formatCurrency={(amount) => formatCurrency(amount, activePortfolio.currency)}
-          />
         );
     }
   };
@@ -1684,7 +1705,7 @@ function App() {
                     <UserMenu 
                         profile={profile}
                         portfolios={portfolios}
-                        onProfileClick={() => { setView('profile'); setActivePortfolioId(null); }}
+                        onProfileClick={() => { setView('profile'); setActivePortfolioId(null); setIsAddingPortfolio(false); }}
                         onPortfolioClick={handleNavigateToPortfolio}
                         onExpensesClick={handleNavigateToExpenses}
                         onLogout={() => signOut(auth)}
