@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import type { Trade } from '../types';
 
 interface AddTradeFormProps {
@@ -6,29 +6,6 @@ interface AddTradeFormProps {
   historicalAssets: string[];
   t: (key: string) => string;
 }
-
-const egxStocks = [
-  { ticker: 'COMI', name: 'البنك التجاري الدولي' },
-  { ticker: 'EAST', name: 'الشرقية - ايسترن كومباني' },
-  { ticker: 'HRHO', name: 'السويدي اليكتريك' },
-  { ticker: 'TMGH', name: 'مجموعة طلعت مصطفى القابضة' },
-  { ticker: 'FWRY', name: 'فوري لتكنولوجيا البنوك والمدفوعات الالكترونية' },
-  { ticker: 'EKHO', name: 'اي اف چي القابضة' },
-  { ticker: 'ABUK', name: 'أبو قير للأسمدة والصناعات الكيماوية' },
-  { ticker: 'ORAS', name: 'أوراسكوم كونستراكشون بي ال سي' },
-  { ticker: 'ESRS', name: 'حديد عز' },
-  { ticker: 'MPRC', name: 'مدينة مصر' },
-  { ticker: 'EGTS', name: 'المصرية للاتصالات' },
-  { ticker: 'HELI', name: 'مصر الجديدة للاسكان والتعمير' },
-  { ticker: 'CCAP', name: 'القلعة للاستشارات المالية' },
-  { ticker: 'OCDI', name: 'أوراسكوم للاستثمار القابضة' },
-  { ticker: 'PHDC', name: 'بالم هيلز للتعمير' },
-  { ticker: 'JUFO', name: 'جهينة للصناعات الغذائية' },
-  { ticker: 'SKPC', name: 'سيدي كرير للبتروكيماويات - سيدبك' },
-  { ticker: 'ISPH', name: 'ابن سينا فارما' },
-  { ticker: 'RMDA', name: 'العاشر من رمضان للصناعات الدوائية والمستحضرات تشخيصية-راميدا' },
-  { ticker: 'ADIB', name: 'مصرف أبوظبي الإسلامي - مصر' },
-];
 
 const AddTradeForm: React.FC<AddTradeFormProps> = ({ onAddTrade, historicalAssets, t }) => {
   const [assetName, setAssetName] = useState('');
@@ -38,55 +15,6 @@ const AddTradeForm: React.FC<AddTradeFormProps> = ({ onAddTrade, historicalAsset
   const [stopLossPrice, setStopLossPrice] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const handleAssetNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAssetName(e.target.value);
-    if (!isDropdownOpen) {
-      setIsDropdownOpen(true);
-    }
-  };
-
-  const handleSelectStock = (stock: { ticker: string; name: string }) => {
-    setAssetName(stock.ticker);
-    setIsDropdownOpen(false);
-  };
-
-  const filteredStocks = useMemo(() => {
-    const combinedStocks = [...egxStocks];
-    const existingTickers = new Set(egxStocks.map(s => s.ticker.toUpperCase()));
-
-    historicalAssets.forEach(ticker => {
-      const upperTicker = ticker.toUpperCase();
-      if (!existingTickers.has(upperTicker)) {
-        combinedStocks.push({ ticker, name: t('previouslyTradedStock') });
-        existingTickers.add(upperTicker);
-      }
-    });
-
-    if (!assetName.trim()) {
-      return combinedStocks;
-    }
-
-    const searchLower = assetName.toLowerCase();
-    return combinedStocks.filter(stock =>
-      stock.ticker.toLowerCase().includes(searchLower) ||
-      stock.name.toLowerCase().includes(searchLower)
-    );
-  }, [assetName, historicalAssets, t]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,47 +81,15 @@ const AddTradeForm: React.FC<AddTradeFormProps> = ({ onAddTrade, historicalAsset
     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg h-full">
       <h3 className="text-xl font-bold mb-4">{t('newTradeTitle')}</h3>
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="relative" ref={dropdownRef}>
+        <div>
           <label htmlFor="assetName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('assetNameLabel')}</label>
-          <input
-            type="text"
-            id="assetName"
-            value={assetName}
-            onChange={handleAssetNameChange}
-            onFocus={() => setIsDropdownOpen(true)}
-            className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-2 focus:ring-2 focus:ring-cyan-500 outline-none transition"
-            placeholder={t('assetNamePlaceholder')}
-            required
-            autoComplete="off"
-          />
-          {isDropdownOpen && filteredStocks.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-gray-200 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto">
-              <ul className="py-1">
-                {filteredStocks.map(stock => (
-                  <li
-                    key={stock.ticker}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleSelectStock(stock);
-                    }}
-                    className="px-3 py-2 hover:bg-gray-300 dark:hover:bg-gray-700 cursor-pointer"
-                  >
-                    <div className="flex items-center">
-                      <div className="flex items-center justify-center w-8 h-8 mr-3 rtl:mr-0 rtl:ml-3 rounded-full bg-gray-500 dark:bg-gray-600 text-white font-bold text-sm flex-shrink-0">
-                        {stock.ticker.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="font-bold text-gray-900 dark:text-white">{stock.ticker}</div>
-                        <div className="text-sm text-gray-600 dark:text-gray-400">{stock.name}</div>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <input type="text" id="assetName" value={assetName} onChange={(e) => setAssetName(e.target.value)} className="w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-2 focus:ring-2 focus:ring-cyan-500 outline-none transition" placeholder={t('assetNamePlaceholder')} required list="historical-assets" />
+          <datalist id="historical-assets">
+            {historicalAssets.map(asset => (
+              <option key={asset} value={asset} />
+            ))}
+          </datalist>
         </div>
-
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="entryPrice" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('entryPriceLabel')}</label>

@@ -1,8 +1,7 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Trade } from '../types';
 import { TrashIcon, TrendingDownIcon, TrendingUpIcon, EditIcon, InfoIcon } from './Icons';
 import ConfirmModal from './ConfirmModal';
-
 
 // Modal Component for closing trades
 const CloseTradeModal: React.FC<{
