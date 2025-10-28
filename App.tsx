@@ -258,7 +258,8 @@ const arTranslations = {
     switchToArabic: 'التحويل إلى العربية',
     myFirstPortfolio: 'محفظتي الأولى',
     myPortfolio: 'محفظتي',
-    myPortfolios: 'محافظي',
+    myPortfolios: 'محافظ الأستثمار',
+    expenses: 'المصروفات',
     // Profile
     profilePageTitle: 'الملف الشخصي',
     displayNameLabel: 'الاسم المعروض',
@@ -277,6 +278,7 @@ const arTranslations = {
     cityLabel: 'المدينة',
     selectCountry: 'اختر الدولة',
     selectCity: 'اختر المدينة',
+    profileUpdateSuccess: 'تم تحديث الملف الشخصي بنجاح!',
     profileUpdateImageError: 'فشل تحميل الصورة. الرجاء المحاولة مرة أخرى.',
     profileUpdateSaveError: 'فشل حفظ الملف الشخصي. الرجاء المحاولة مرة أخرى.',
 };
@@ -496,7 +498,8 @@ const enTranslations: Record<string, string> = {
     switchToArabic: 'Switch to Arabic',
     myFirstPortfolio: 'My First Portfolio',
     myPortfolio: 'My Portfolio',
-    myPortfolios: 'My Portfolios',
+    myPortfolios: 'Investment Portfolios',
+    expenses: 'Expenses',
     // Profile
     profilePageTitle: 'Profile',
     displayNameLabel: 'Display Name',
@@ -515,6 +518,7 @@ const enTranslations: Record<string, string> = {
     cityLabel: 'City',
     selectCountry: 'Select Country',
     selectCity: 'Select City',
+    profileUpdateSuccess: 'Profile updated successfully!',
     profileUpdateImageError: 'Failed to upload image. Please try again.',
     profileUpdateSaveError: 'Failed to save profile. Please try again.',
 };
@@ -992,46 +996,62 @@ const LoginPage: React.FC<{
     );
 };
 
+type ProfileFormData = Omit<Profile, 'photoURL'>;
+
 const ProfilePage: React.FC<{
     user: User;
     profile: Profile | null;
-    onUpdate: (updates: Omit<Profile, 'photoURL'>, newImageFile: File | null) => Promise<void>;
+    onUpdate: (updates: ProfileFormData, newImageFile: File | null) => Promise<void>;
     onBack: () => void;
     t: (key: string) => string;
     language: Language;
 }> = ({ user, profile, onUpdate, onBack, t, language }) => {
-    const [displayName, setDisplayName] = useState('');
-    const [address, setAddress] = useState('');
-    const [phoneNumber, setPhoneNumber] = useState('');
-    const [country, setCountry] = useState('');
-    const [city, setCity] = useState('');
-    
+    const [formData, setFormData] = useState<ProfileFormData>({
+        displayName: profile?.displayName || '',
+        address: profile?.address || '',
+        phoneNumber: profile?.phoneNumber || '',
+        country: profile?.country || '',
+        city: profile?.city || '',
+    });
     const [imageFile, setImageFile] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(profile?.photoURL || null);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const prevProfileRef = useRef<Profile | null>(profile);
 
-    // This effect syncs the local form state with the profile prop from App state.
-    // The dependency array is specific to prevent re-running on every parent re-render
-    // if the profile data itself hasn't changed, which fixes the bug of overwriting user input.
     useEffect(() => {
-        if (profile) {
-            setDisplayName(profile.displayName || '');
-            setAddress(profile.address || '');
-            setPhoneNumber(profile.phoneNumber || '');
-            setCountry(profile.country || '');
-            setCity(profile.city || '');
+        // This effect syncs the form state with the profile prop from the App state.
+        // It's designed to only update the form if the data from Firestore is genuinely different
+        // from what's currently being displayed, preventing the user's input from being overwritten
+        // by a re-render with the same data.
+        if (profile && profile !== prevProfileRef.current) {
+            setFormData({
+                displayName: profile.displayName || '',
+                address: profile.address || '',
+                phoneNumber: profile.phoneNumber || '',
+                country: profile.country || '',
+                city: profile.city || '',
+            });
             setImagePreview(profile.photoURL || null);
+            prevProfileRef.current = profile;
         }
-    }, [profile?.displayName, profile?.photoURL, profile?.address, profile?.phoneNumber, profile?.country, profile?.city]);
+    }, [profile]);
 
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { id, value } = e.target;
+        setFormData(prev => ({ ...prev, [id]: value }));
+    };
 
     const countries = useMemo(() => Object.keys(countryCityData[language]), [language]);
-    const cities = useMemo(() => country ? countryCityData[language][country as keyof typeof countryCityData[Language]] || [] : [], [country, language]);
+    const cities = useMemo(() => formData.country ? countryCityData[language][formData.country as keyof typeof countryCityData[Language]] || [] : [], [formData.country, language]);
 
     const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setCountry(e.target.value);
-        setCity(''); // Reset city when country changes
+        const newCountry = e.target.value;
+        setFormData(prev => ({
+            ...prev,
+            country: newCountry,
+            city: '', // Reset city when country changes
+        }));
     };
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1049,18 +1069,12 @@ const ProfilePage: React.FC<{
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
-        const profileUpdates = {
-            displayName,
-            address,
-            phoneNumber,
-            country,
-            city,
-        };
         try {
-            await onUpdate(profileUpdates, imageFile);
+            await onUpdate(formData, imageFile);
+            alert(t('profileUpdateSuccess'));
         } catch(error) {
             console.error("Failed to update profile", error);
-            // The onUpdate function itself will alert the user.
+            // The onUpdate function itself will alert the user of specific errors.
         } finally {
             setIsSaving(false);
         }
@@ -1103,8 +1117,8 @@ const ProfilePage: React.FC<{
                         <input
                             type="text"
                             id="displayName"
-                            value={displayName}
-                            onChange={(e) => setDisplayName(e.target.value)}
+                            value={formData.displayName}
+                            onChange={handleFormChange}
                             className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
                             placeholder={t('displayNamePlaceholder')}
                             required
@@ -1115,8 +1129,8 @@ const ProfilePage: React.FC<{
                         <input
                             type="tel"
                             id="phoneNumber"
-                            value={phoneNumber}
-                            onChange={(e) => setPhoneNumber(e.target.value)}
+                            value={formData.phoneNumber}
+                            onChange={handleFormChange}
                             className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
                             placeholder={t('phoneNumberPlaceholder')}
                         />
@@ -1128,8 +1142,8 @@ const ProfilePage: React.FC<{
                     <input
                         type="text"
                         id="address"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
+                        value={formData.address}
+                        onChange={handleFormChange}
                         className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
                         placeholder={t('addressPlaceholder')}
                     />
@@ -1140,7 +1154,7 @@ const ProfilePage: React.FC<{
                         <label htmlFor="country" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('countryLabel')}</label>
                         <select
                             id="country"
-                            value={country}
+                            value={formData.country}
                             onChange={handleCountryChange}
                             className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
                         >
@@ -1152,10 +1166,10 @@ const ProfilePage: React.FC<{
                         <label htmlFor="city" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('cityLabel')}</label>
                         <select
                             id="city"
-                            value={city}
-                            onChange={(e) => setCity(e.target.value)}
+                            value={formData.city}
+                            onChange={handleFormChange}
                             className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
-                            disabled={!country}
+                            disabled={!formData.country}
                         >
                             <option value="">{t('selectCity')}</option>
                             {cities.map(c => <option key={c} value={c}>{c}</option>)}
@@ -1201,11 +1215,12 @@ const UserMenu: React.FC<{
     portfolios: Portfolio[];
     onProfileClick: () => void;
     onPortfolioClick: (id: string) => void;
+    onExpensesClick: () => void;
     onLogout: () => void;
     language: Language;
     setLanguage: (lang: Language) => void;
     t: (key: string) => string;
-}> = ({ profile, portfolios, onProfileClick, onPortfolioClick, onLogout, language, setLanguage, t }) => {
+}> = ({ profile, portfolios, onProfileClick, onPortfolioClick, onExpensesClick, onLogout, language, setLanguage, t }) => {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -1260,6 +1275,9 @@ const UserMenu: React.FC<{
                      </div>
 
                     <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                    <button onClick={() => { onExpensesClick(); setIsOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">{t('expenses')}</button>
+                    
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                     <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />
 
                     <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
@@ -1276,6 +1294,18 @@ const UserMenu: React.FC<{
     );
 };
 
+const ExpensesPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+    return (
+        <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-2xl shadow-cyan-500/10 animate-fade-in text-center">
+            <h2 className="text-2xl font-bold mb-4">Expenses</h2>
+            <p className="text-gray-500 dark:text-gray-400 mb-6">This section is under construction.</p>
+            <button onClick={onBack} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md transition">
+                Back
+            </button>
+        </div>
+    );
+};
+
 
 function App() {
   const defaultLang = navigator.language.startsWith('ar') ? 'ar' : 'en';
@@ -1287,7 +1317,7 @@ function App() {
   const [loading, setLoading] = useState(true); // Always start in a loading state
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null);
-  const [view, setView] = useState<'home' | 'profile'>('home');
+  const [view, setView] = useState<'home' | 'profile' | 'expenses'>('home');
 
   const t = useCallback((key: string): string => {
     const translation = translations[language][key] || translations['en'][key];
@@ -1408,38 +1438,38 @@ function App() {
       }
   };
 
-   const handleProfileUpdate = async (updates: Omit<Profile, 'photoURL'>, newImageFile: File | null) => {
+   const handleProfileUpdate = async (updates: ProfileFormData, newImageFile: File | null) => {
         if (!user) return;
 
-        // Start with a copy of the existing profile data to ensure no fields are accidentally lost
-        // then overwrite with the new updates from the form.
-        const newProfileData: Profile = {
-            ...(profile || { displayName: '', photoURL: '' }),
-            ...updates,
-        };
+        let newPhotoURL = profile?.photoURL || '';
 
         if (newImageFile) {
             const storageRef = ref(storage, `profile_images/${user.uid}`);
             try {
                 const snapshot = await uploadBytes(storageRef, newImageFile);
-                newProfileData.photoURL = await getDownloadURL(snapshot.ref);
+                newPhotoURL = await getDownloadURL(snapshot.ref);
             } catch (error) {
                 console.error("Error uploading profile image:", error);
                 alert(t('profileUpdateImageError'));
-                throw error; // Throw error to stop the process and prevent isSaving from being set to false too early
+                throw error; // Propagate error to the caller
             }
         }
+        
+        const completeProfile: Profile = {
+            ...updates,
+            photoURL: newPhotoURL,
+        };
         
         const userDocRef = doc(db, 'userData', user.uid);
         
         try {
-            await setDoc(userDocRef, { profile: newProfileData }, { merge: true });
+            await setDoc(userDocRef, { profile: completeProfile }, { merge: true });
             setView('home');
             setActivePortfolioId(null);
         } catch (error) {
             console.error("Error saving profile to Firestore:", error);
             alert(t('profileUpdateSaveError'));
-            throw error; // Re-throw to be caught by the caller
+            throw error; // Propagate error to the caller
         }
     };
 
@@ -1503,6 +1533,160 @@ function App() {
     setView('home');
     setActivePortfolioId(id);
   }
+  
+  const handleNavigateToExpenses = () => {
+      setView('expenses');
+      setActivePortfolioId(null);
+  }
+
+  const renderContent = () => {
+    switch (view) {
+      case 'profile':
+        return <ProfilePage user={user} profile={profile} onUpdate={handleProfileUpdate} onBack={goHome} t={t} language={language} />;
+      case 'expenses':
+          return <ExpensesPage onBack={goHome} />;
+      case 'home':
+      default:
+        if (!activePortfolio) {
+          return portfolios.length === 0 ? (
+            <SetupForm onSetup={handleSetup} t={t} />
+          ) : (
+            <HomePage 
+              portfolios={portfolios} 
+              onSelectPortfolio={setActivePortfolioId} 
+              onAddNewPortfolio={handleAddNewPortfolio}
+              onDeletePortfolio={handleDeletePortfolio}
+              t={t} 
+              language={language} 
+              formatCurrency={formatCurrency}
+            />
+          );
+        }
+        
+        const closedTrades = activePortfolio.trades.filter(trade => trade.status === 'closed');
+        const currentCapital = closedTrades.reduce((acc, trade) => acc + trade.pnl, activePortfolio.initialCapital);
+        const historicalAssets = Array.from(new Set(activePortfolio.trades.map(t => t.assetName)));
+        
+        const handleAddTrade = (tradeData: Omit<Trade, 'id' | 'capitalBeforeTrade' | 'status' | 'pnl' | 'openDate' | 'closeDate'>) => {
+          const newTrade: Trade = {
+            ...tradeData,
+            id: Date.now().toString(),
+            status: 'open',
+            pnl: 0,
+            capitalBeforeTrade: currentCapital,
+            openDate: Date.now(),
+          };
+          const updatedPortfolio = { ...activePortfolio, trades: [...activePortfolio.trades, newTrade] };
+          handleUpdatePortfolios(updatedPortfolio);
+        };
+
+        const handleCloseTrade = (tradeId: string, finalPnl: number) => {
+          const updatedTrades = activePortfolio.trades.map(trade => 
+            trade.id === tradeId ? { ...trade, status: 'closed', pnl: finalPnl, closeDate: Date.now() } : trade
+          );
+          const updatedPortfolio = { ...activePortfolio, trades: updatedTrades };
+          handleUpdatePortfolios(updatedPortfolio);
+
+          const closedTrade = updatedTrades.find(t => t.id === tradeId);
+          if (closedTrade) {
+            const pnlFormatted = formatCurrency(finalPnl);
+            let title, body;
+            if (finalPnl > 0) {
+              title = t('notificationWinTitle');
+              body = t('notificationWinBody').replace('{assetName}', closedTrade.assetName).replace('{pnl}', pnlFormatted);
+            } else if (finalPnl < 0) {
+              title = t('notificationLossTitle');
+              body = t('notificationLossBody').replace('{assetName}', closedTrade.assetName).replace('{pnl}', pnlFormatted);
+            } else {
+              title = t('notificationBreakevenTitle');
+              body = t('notificationBreakevenBody').replace('{assetName}', closedTrade.assetName);
+            }
+            sendNotification(title, { body });
+          }
+        };
+        
+        const handleUpdateTrade = (tradeId: string, updates: Partial<Pick<Trade, 'entryPrice' | 'tradeValue' | 'takeProfitPrice' | 'stopLossPrice' | 'notes'>>) => {
+            const updatedTrades = activePortfolio.trades.map(trade => {
+                if (trade.id === tradeId) {
+                    const updatedTrade = { ...trade, ...updates };
+                    // Recalculate TP/SL amounts if prices changed
+                    if (updates.entryPrice !== undefined || updates.tradeValue !== undefined || updates.takeProfitPrice !== undefined || updates.stopLossPrice !== undefined) {
+                        const entryPrice = updatedTrade.entryPrice;
+                        const tradeValue = updatedTrade.tradeValue;
+                        const takeProfitPrice = updatedTrade.takeProfitPrice;
+                        const stopLossPrice = updatedTrade.stopLossPrice;
+                        const numberOfShares = tradeValue / entryPrice;
+                        updatedTrade.takeProfit = (takeProfitPrice - entryPrice) * numberOfShares;
+                        updatedTrade.stopLoss = (entryPrice - stopLossPrice) * numberOfShares;
+                    }
+                    return updatedTrade;
+                }
+                return trade;
+            });
+            handleUpdatePortfolios({ ...activePortfolio, trades: updatedTrades });
+        };
+        
+        const handleDeleteTrade = (tradeId: string) => {
+          const updatedTrades = activePortfolio.trades.filter(trade => trade.id !== tradeId);
+          const updatedPortfolio = { ...activePortfolio, trades: updatedTrades };
+          handleUpdatePortfolios(updatedPortfolio);
+        };
+        
+        const handleDeleteCurrentPortfolio = () => {
+            handleDeletePortfolio(activePortfolio.id);
+        };
+
+        const handleExportCSV = () => {
+          const headers = ['#', t('assetHeader'), t('dateHeader'), `${t('pnlHeader')} (${activePortfolio.currency})`, t('percentageHeader'), t('notesLabel')];
+          const rows = closedTrades.map((trade, index) => [
+            closedTrades.length - index,
+            trade.assetName,
+            trade.closeDate ? new Date(trade.closeDate).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US') : '-',
+            trade.pnl,
+            trade.tradeValue > 0 ? ((trade.pnl / trade.tradeValue) * 100).toFixed(2) : '0.00',
+            trade.notes || ''
+          ]);
+          const csvContent = "data:text/csv;charset=utf-8," 
+            + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+          
+          const link = document.createElement("a");
+          link.setAttribute("href", encodeURI(csvContent));
+          link.setAttribute("download", `${activePortfolio.portfolioName}_trades.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
+        
+        const handleUpdateTargets = (newTargets: Target[]) => {
+            handleUpdatePortfolios({ ...activePortfolio, targets: newTargets });
+        };
+
+        const handleUpdateInitialCapital = (newCapital: number) => {
+            handleUpdatePortfolios({ ...activePortfolio, initialCapital: newCapital });
+        };
+
+        return (
+          <Dashboard
+            portfolio={activePortfolio}
+            currentCapital={currentCapital}
+            closedTrades={closedTrades}
+            historicalAssets={historicalAssets}
+            onAddTrade={handleAddTrade}
+            onCloseTrade={handleCloseTrade}
+            onUpdateTrade={handleUpdateTrade}
+            onDeleteTrade={handleDeleteTrade}
+            onDeletePortfolio={handleDeleteCurrentPortfolio}
+            onExportCSV={handleExportCSV}
+            onUpdateTargets={handleUpdateTargets}
+            onUpdateInitialCapital={handleUpdateInitialCapital}
+            onGoHome={goHome}
+            t={t}
+            language={language}
+            formatCurrency={(amount) => formatCurrency(amount, activePortfolio.currency)}
+          />
+        );
+    }
+  };
 
   return (
     <div dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
@@ -1519,6 +1703,7 @@ function App() {
                         portfolios={portfolios}
                         onProfileClick={() => { setView('profile'); setActivePortfolioId(null); }}
                         onPortfolioClick={handleNavigateToPortfolio}
+                        onExpensesClick={handleNavigateToExpenses}
                         onLogout={() => signOut(auth)}
                         language={language}
                         setLanguage={setLanguage}
@@ -1530,148 +1715,7 @@ function App() {
       </header>
 
       <main className="container mx-auto p-4 sm:p-6 lg:p-8">
-        {view === 'profile' ? (
-            <ProfilePage user={user} profile={profile} onUpdate={handleProfileUpdate} onBack={goHome} t={t} language={language} />
-        ) : !activePortfolio ? (
-            portfolios.length === 0 ? (
-                <SetupForm onSetup={handleSetup} t={t} />
-            ) : (
-                <HomePage 
-                    portfolios={portfolios} 
-                    onSelectPortfolio={setActivePortfolioId} 
-                    onAddNewPortfolio={handleAddNewPortfolio}
-                    onDeletePortfolio={handleDeletePortfolio}
-                    t={t} 
-                    language={language} 
-                    formatCurrency={formatCurrency}
-                />
-            )
-        ) : (
-          (() => {
-            const closedTrades = activePortfolio.trades.filter(trade => trade.status === 'closed');
-            const currentCapital = closedTrades.reduce((acc, trade) => acc + trade.pnl, activePortfolio.initialCapital);
-            const historicalAssets = Array.from(new Set(activePortfolio.trades.map(t => t.assetName)));
-            
-            const handleAddTrade = (tradeData: Omit<Trade, 'id' | 'capitalBeforeTrade' | 'status' | 'pnl' | 'openDate' | 'closeDate'>) => {
-              const newTrade: Trade = {
-                ...tradeData,
-                id: Date.now().toString(),
-                status: 'open',
-                pnl: 0,
-                capitalBeforeTrade: currentCapital,
-                openDate: Date.now(),
-              };
-              const updatedPortfolio = { ...activePortfolio, trades: [...activePortfolio.trades, newTrade] };
-              handleUpdatePortfolios(updatedPortfolio);
-            };
-
-            const handleCloseTrade = (tradeId: string, finalPnl: number) => {
-              const updatedTrades = activePortfolio.trades.map(trade => 
-                trade.id === tradeId ? { ...trade, status: 'closed', pnl: finalPnl, closeDate: Date.now() } : trade
-              );
-              const updatedPortfolio = { ...activePortfolio, trades: updatedTrades };
-              handleUpdatePortfolios(updatedPortfolio);
-
-              const closedTrade = updatedTrades.find(t => t.id === tradeId);
-              if (closedTrade) {
-                const pnlFormatted = formatCurrency(finalPnl);
-                let title, body;
-                if (finalPnl > 0) {
-                  title = t('notificationWinTitle');
-                  body = t('notificationWinBody').replace('{assetName}', closedTrade.assetName).replace('{pnl}', pnlFormatted);
-                } else if (finalPnl < 0) {
-                  title = t('notificationLossTitle');
-                  body = t('notificationLossBody').replace('{assetName}', closedTrade.assetName).replace('{pnl}', pnlFormatted);
-                } else {
-                  title = t('notificationBreakevenTitle');
-                  body = t('notificationBreakevenBody').replace('{assetName}', closedTrade.assetName);
-                }
-                sendNotification(title, { body });
-              }
-            };
-            
-            const handleUpdateTrade = (tradeId: string, updates: Partial<Pick<Trade, 'entryPrice' | 'tradeValue' | 'takeProfitPrice' | 'stopLossPrice' | 'notes'>>) => {
-                const updatedTrades = activePortfolio.trades.map(trade => {
-                    if (trade.id === tradeId) {
-                        const updatedTrade = { ...trade, ...updates };
-                        // Recalculate TP/SL amounts if prices changed
-                        if (updates.entryPrice !== undefined || updates.tradeValue !== undefined || updates.takeProfitPrice !== undefined || updates.stopLossPrice !== undefined) {
-                            const entryPrice = updatedTrade.entryPrice;
-                            const tradeValue = updatedTrade.tradeValue;
-                            const takeProfitPrice = updatedTrade.takeProfitPrice;
-                            const stopLossPrice = updatedTrade.stopLossPrice;
-                            const numberOfShares = tradeValue / entryPrice;
-                            updatedTrade.takeProfit = (takeProfitPrice - entryPrice) * numberOfShares;
-                            updatedTrade.stopLoss = (entryPrice - stopLossPrice) * numberOfShares;
-                        }
-                        return updatedTrade;
-                    }
-                    return trade;
-                });
-                handleUpdatePortfolios({ ...activePortfolio, trades: updatedTrades });
-            };
-            
-            const handleDeleteTrade = (tradeId: string) => {
-              const updatedTrades = activePortfolio.trades.filter(trade => trade.id !== tradeId);
-              const updatedPortfolio = { ...activePortfolio, trades: updatedTrades };
-              handleUpdatePortfolios(updatedPortfolio);
-            };
-            
-            const handleDeleteCurrentPortfolio = () => {
-                handleDeletePortfolio(activePortfolio.id);
-            };
-
-            const handleExportCSV = () => {
-              const headers = ['#', t('assetHeader'), t('dateHeader'), `${t('pnlHeader')} (${activePortfolio.currency})`, t('percentageHeader'), t('notesLabel')];
-              const rows = closedTrades.map((trade, index) => [
-                closedTrades.length - index,
-                trade.assetName,
-                trade.closeDate ? new Date(trade.closeDate).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-US') : '-',
-                trade.pnl,
-                trade.tradeValue > 0 ? ((trade.pnl / trade.tradeValue) * 100).toFixed(2) : '0.00',
-                trade.notes || ''
-              ]);
-              const csvContent = "data:text/csv;charset=utf-8," 
-                + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-              
-              const link = document.createElement("a");
-              link.setAttribute("href", encodeURI(csvContent));
-              link.setAttribute("download", `${activePortfolio.portfolioName}_trades.csv`);
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            };
-            
-            const handleUpdateTargets = (newTargets: Target[]) => {
-                handleUpdatePortfolios({ ...activePortfolio, targets: newTargets });
-            };
-
-            const handleUpdateInitialCapital = (newCapital: number) => {
-                handleUpdatePortfolios({ ...activePortfolio, initialCapital: newCapital });
-            };
-
-            return (
-              <Dashboard
-                portfolio={activePortfolio}
-                currentCapital={currentCapital}
-                closedTrades={closedTrades}
-                historicalAssets={historicalAssets}
-                onAddTrade={handleAddTrade}
-                onCloseTrade={handleCloseTrade}
-                onUpdateTrade={handleUpdateTrade}
-                onDeleteTrade={handleDeleteTrade}
-                onDeletePortfolio={handleDeleteCurrentPortfolio}
-                onExportCSV={handleExportCSV}
-                onUpdateTargets={handleUpdateTargets}
-                onUpdateInitialCapital={handleUpdateInitialCapital}
-                onGoHome={goHome}
-                t={t}
-                language={language}
-                formatCurrency={(amount) => formatCurrency(amount, activePortfolio.currency)}
-              />
-            );
-          })()
-        )}
+        {renderContent()}
       </main>
        <footer className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
         <p>{t('footer')}</p>
