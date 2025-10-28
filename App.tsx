@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -261,27 +262,6 @@ const arTranslations = {
     myPortfolio: 'محفظتي',
     myPortfolios: 'محافظ الأستثمار',
     expenses: 'المصروفات',
-    // Profile
-    profilePageTitle: 'الملف الشخصي',
-    displayNameLabel: 'الاسم المعروض',
-    displayNamePlaceholder: 'اسمك الكامل',
-    changeProfilePicture: 'تغيير الصورة',
-    profileEmailNotEditable: 'البريد الإلكتروني لتسجيل الدخول (غير قابل للتعديل)',
-    saveProfile: 'حفظ الملف الشخصي',
-    saving: 'جارٍ الحفظ...',
-    back: 'رجوع',
-    profile: 'الملف الشخصي',
-    addressLabel: 'العنوان',
-    addressPlaceholder: 'شارع، مبنى، شقة',
-    phoneNumberLabel: 'رقم الهاتف',
-    phoneNumberPlaceholder: '+201234567890',
-    countryLabel: 'الدولة',
-    cityLabel: 'المدينة',
-    selectCountry: 'اختر الدولة',
-    selectCity: 'اختر المدينة',
-    profileUpdateSuccess: 'تم تحديث الملف الشخصي بنجاح!',
-    profileUpdateImageError: 'فشل تحميل الصورة. الرجاء المحاولة مرة أخرى.',
-    profileUpdateSaveError: 'فشل حفظ الملف الشخصي. الرجاء المحاولة مرة أخرى.',
 };
 
 const enTranslations: Record<string, string> = {
@@ -501,27 +481,6 @@ const enTranslations: Record<string, string> = {
     myPortfolio: 'My Portfolio',
     myPortfolios: 'Investment Portfolios',
     expenses: 'Expenses',
-    // Profile
-    profilePageTitle: 'Profile',
-    displayNameLabel: 'Display Name',
-    displayNamePlaceholder: 'Your full name',
-    changeProfilePicture: 'Change Picture',
-    profileEmailNotEditable: 'Login Email (cannot be changed)',
-    saveProfile: 'Save Profile',
-    saving: 'Saving...',
-    back: 'Back',
-    profile: 'Profile',
-    addressLabel: 'Address',
-    addressPlaceholder: 'Street, Building, Apartment',
-    phoneNumberLabel: 'Phone Number',
-    phoneNumberPlaceholder: '+1 (555) 123-4567',
-    countryLabel: 'Country',
-    cityLabel: 'City',
-    selectCountry: 'Select Country',
-    selectCity: 'Select City',
-    profileUpdateSuccess: 'Profile updated successfully!',
-    profileUpdateImageError: 'Failed to upload image. Please try again.',
-    profileUpdateSaveError: 'Failed to save profile. Please try again.',
 };
 
 const translations = {
@@ -529,31 +488,7 @@ const translations = {
     en: enTranslations,
 };
 
-const countryCityData = {
-    ar: {
-        'مصر': ['القاهرة', 'الإسكندرية', 'الجيزة', 'الأقصر'],
-        'المملكة العربية السعودية': ['الرياض', 'جدة', 'مكة', 'المدينة المنورة', 'الدمام'],
-        'الإمارات العربية المتحدة': ['دبي', 'أبو ظبي', 'الشارقة', 'عجمان'],
-        'الولايات المتحدة': ['نيويورك', 'لوس أنجلوس', 'شيكاغو', 'هيوستن']
-    },
-    en: {
-        'Egypt': ['Cairo', 'Alexandria', 'Giza', 'Luxor'],
-        'Saudi Arabia': ['Riyadh', 'Jeddah', 'Mecca', 'Medina', 'Dammam'],
-        'United Arab Emirates': ['Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman'],
-        'United States': ['New York', 'Los Angeles', 'Chicago', 'Houston']
-    }
-};
-
-
 type Language = 'ar' | 'en';
-interface Profile {
-    displayName: string;
-    photoURL: string;
-    address?: string;
-    country?: string;
-    city?: string;
-    phoneNumber?: string;
-}
 
 const getFirebaseAuthErrorMessage = (error: any, t: (key: string) => string) => {
     switch (error.code) {
@@ -997,226 +932,16 @@ const LoginPage: React.FC<{
     );
 };
 
-type ProfileFormData = Omit<Profile, 'photoURL'>;
-
-const ProfilePage: React.FC<{
-    user: User;
-    profile: Profile | null;
-    onUpdate: (updates: ProfileFormData, newImageFile: File | null) => Promise<void>;
-    onBack: () => void;
-    t: (key: string) => string;
-    language: Language;
-}> = ({ user, profile, onUpdate, onBack, t, language }) => {
-    const [formData, setFormData] = useState<ProfileFormData>({
-        displayName: '', address: '', phoneNumber: '', country: '', city: '',
-    });
-    const [imageFile, setImageFile] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    
-    // Definitive Fix: This useEffect hook correctly synchronizes the form's internal state
-    // with the profile data that is loaded asynchronously from Firestore.
-    // This ensures the form is always populated with the latest data, fixing the bug
-    // where the form would be empty if the data arrived after the initial render.
-    useEffect(() => {
-        if (profile) {
-            setFormData({
-                displayName: profile.displayName || '',
-                address: profile.address || '',
-                phoneNumber: profile.phoneNumber || '',
-                country: profile.country || '',
-                city: profile.city || '',
-            });
-            setImagePreview(profile.photoURL || null);
-        }
-    }, [profile]);
-
-
-    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { id, value } = e.target;
-        setFormData(prev => ({ ...prev, [id]: value }));
-    };
-
-    const countries = useMemo(() => Object.keys(countryCityData[language]), [language]);
-    const cities = useMemo(() => formData.country ? countryCityData[language][formData.country as keyof typeof countryCityData[Language]] || [] : [], [formData.country, language]);
-
-    const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        const newCountry = e.target.value;
-        setFormData(prev => ({
-            ...prev,
-            country: newCountry,
-            city: '', // Reset city when country changes
-        }));
-    };
-
-    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            setImageFile(file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setImagePreview(reader.result as string);
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSaving(true);
-        try {
-            await onUpdate(formData, imageFile);
-            alert(t('profileUpdateSuccess'));
-        } catch(error) {
-            console.error("Failed to update profile", error);
-            // The onUpdate function itself will alert the user of specific errors.
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    return (
-        <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-2xl shadow-cyan-500/10 animate-fade-in">
-            <h2 className="text-2xl font-bold text-center mb-6 text-cyan-600 dark:text-cyan-400">{t('profilePageTitle')}</h2>
-            <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="flex flex-col items-center space-y-4">
-                    <div className="relative">
-                        <div className="w-32 h-32 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
-                            {imagePreview ? (
-                                <img src={imagePreview} alt="Profile Preview" className="w-full h-full object-cover" />
-                            ) : (
-                                <UserIcon />
-                            )}
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            className="absolute bottom-0 right-0 bg-cyan-600 hover:bg-cyan-700 text-white p-2 rounded-full shadow-md"
-                            aria-label={t('changeProfilePicture')}
-                        >
-                           <EditIcon />
-                        </button>
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleImageChange}
-                            accept="image/png, image/jpeg, image/gif"
-                            className="hidden"
-                        />
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('displayNameLabel')}</label>
-                        <input
-                            type="text"
-                            id="displayName"
-                            value={formData.displayName}
-                            onChange={handleFormChange}
-                            className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
-                            placeholder={t('displayNamePlaceholder')}
-                            required
-                        />
-                    </div>
-                     <div>
-                        <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('phoneNumberLabel')}</label>
-                        <input
-                            type="tel"
-                            id="phoneNumber"
-                            value={formData.phoneNumber}
-                            onChange={handleFormChange}
-                            className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
-                            placeholder={t('phoneNumberPlaceholder')}
-                        />
-                    </div>
-                </div>
-
-                <div>
-                    <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('addressLabel')}</label>
-                    <input
-                        type="text"
-                        id="address"
-                        value={formData.address}
-                        onChange={handleFormChange}
-                        className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
-                        placeholder={t('addressPlaceholder')}
-                    />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     <div>
-                        <label htmlFor="country" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('countryLabel')}</label>
-                        <select
-                            id="country"
-                            value={formData.country}
-                            onChange={handleCountryChange}
-                            className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
-                        >
-                            <option value="">{t('selectCountry')}</option>
-                            {countries.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </div>
-                    <div>
-                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('cityLabel')}</label>
-                        <select
-                            id="city"
-                            value={formData.city}
-                            onChange={handleFormChange}
-                            className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
-                            disabled={!formData.country}
-                        >
-                            <option value="">{t('selectCity')}</option>
-                            {cities.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    </div>
-                </div>
-
-                <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('profileEmailNotEditable')}</label>
-                    <input
-                        type="email"
-                        id="email"
-                        value={user.email || ''}
-                        disabled
-                        className="mt-1 w-full bg-gray-200 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 rounded-md p-3 cursor-not-allowed"
-                    />
-                </div>
-
-                <div className="flex items-center gap-4 pt-4">
-                     <button
-                        type="button"
-                        onClick={onBack}
-                        className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-md transition"
-                    >
-                        {t('back')}
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={isSaving}
-                        className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {isSaving ? t('saving') : t('saveProfile')}
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
-
 const UserMenu: React.FC<{
-    profile: Profile | null;
+    user: User | null;
     portfolios: Portfolio[];
-    onProfileClick: () => void;
     onPortfolioClick: (id: string) => void;
     onExpensesClick: () => void;
     onLogout: () => void;
     language: Language;
     setLanguage: (lang: Language) => void;
     t: (key: string) => string;
-}> = ({ profile, portfolios, onProfileClick, onPortfolioClick, onExpensesClick, onLogout, language, setLanguage, t }) => {
+}> = ({ user, portfolios, onPortfolioClick, onExpensesClick, onLogout, language, setLanguage, t }) => {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -1230,8 +955,6 @@ const UserMenu: React.FC<{
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const initials = profile?.displayName ? profile.displayName.split(' ').map(n => n[0]).join('').toUpperCase() : (profile?.displayName || '?');
-
     return (
         <div className="relative" ref={menuRef}>
             <button 
@@ -1239,20 +962,14 @@ const UserMenu: React.FC<{
                 className="flex items-center gap-3 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
                 <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
-                    {profile?.photoURL ? (
-                        <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                    ) : (
-                        <span className="font-bold text-cyan-600 dark:text-cyan-400">{initials}</span>
-                    )}
+                    <UserIcon />
                 </div>
                  <div className="hidden sm:block text-left rtl:text-right">
-                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate max-w-28 block">{profile?.displayName || '...'}</span>
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate max-w-40 block">{user?.email || '...'}</span>
                 </div>
             </button>
             {isOpen && (
                 <div className="absolute top-full mt-2 right-0 rtl:right-auto rtl:left-0 w-60 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-20 py-1">
-                    <button onClick={() => { onProfileClick(); setIsOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">{t('profile')}</button>
-                    
                     <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                     
                      <div className="px-4 pt-2 pb-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{t('myPortfolios')}</div>
@@ -1309,11 +1026,10 @@ function App() {
   const [theme, setTheme] = useLocalStorage<'light' | 'dark'>('theme', 'dark');
 
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true); // Always start in a loading state
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null);
-  const [view, setView] = useState<'home' | 'profile' | 'expenses'>('home');
+  const [view, setView] = useState<'home' | 'expenses'>('home');
   const [isAddingPortfolio, setIsAddingPortfolio] = useState(false);
 
   const t = useCallback((key: string): string => {
@@ -1384,44 +1100,12 @@ function App() {
             // Ensure portfolios is always an array.
             const portfoliosData = data.portfolios;
             setPortfolios(Array.isArray(portfoliosData) ? portfoliosData : []);
-
-            // Robustly handle profile data without self-healing writes.
-            const profileData = data.profile;
-            const isValidProfile = profileData && typeof profileData === 'object' && !Array.isArray(profileData);
-
-            if (isValidProfile) {
-                // Also ensure all expected keys are present to avoid crashes downstream.
-                const p = profileData as Partial<Profile>;
-                setProfile({
-                    displayName: p.displayName || user.email?.split('@')[0] || 'User',
-                    photoURL: p.photoURL || '',
-                    address: p.address || '',
-                    country: p.country || '',
-                    city: p.city || '',
-                    phoneNumber: p.phoneNumber || ''
-                });
-            } else {
-                // If profile is missing or malformed, use a default for this session.
-                // The user can fix it by saving their profile.
-                console.warn("User profile is missing or malformed. Using a default profile for this session.");
-                const defaultDisplayName = user.email?.split('@')[0] || 'User';
-                const defaultProfile: Profile = {
-                    displayName: defaultDisplayName,
-                    photoURL: '', address: '', country: '', city: '', phoneNumber: ''
-                };
-                setProfile(defaultProfile);
-            }
             setLoading(false);
         } else {
             // If user doc doesn't exist, create it. This is a one-time operation.
             console.log("User document does not exist. Creating one...");
-            const defaultDisplayName = user.email?.split('@')[0] || 'User';
-            const defaultProfile: Profile = {
-                displayName: defaultDisplayName,
-                photoURL: '', address: '', country: '', city: '', phoneNumber: ''
-            };
             // This write will trigger the onSnapshot listener again, which will then handle setting the state.
-            setDoc(userDocRef, { profile: defaultProfile, portfolios: [] }).catch(async (error) => {
+            setDoc(userDocRef, { portfolios: [] }).catch(async (error) => {
                 console.error("CRITICAL: Failed to create user document.", error);
                 alert(t('loginErrorGeneric'));
                 await signOut(auth);
@@ -1441,7 +1125,6 @@ function App() {
       };
     } else {
       // User is not logged in or has logged out.
-      setProfile(null);
       setPortfolios([]);
       setLoading(false);
     }
@@ -1464,42 +1147,6 @@ function App() {
           });
       }
   };
-
-   const handleProfileUpdate = async (updates: ProfileFormData, newImageFile: File | null) => {
-        if (!user) return;
-
-        let newPhotoURL = profile?.photoURL || '';
-
-        if (newImageFile) {
-            const storageRef = ref(storage, `profile_images/${user.uid}`);
-            try {
-                const snapshot = await uploadBytes(storageRef, newImageFile);
-                newPhotoURL = await getDownloadURL(snapshot.ref);
-            } catch (error) {
-                console.error("Error uploading profile image:", error);
-                alert(t('profileUpdateImageError'));
-                throw error; // Propagate error to the caller
-            }
-        }
-        
-        const completeProfile: Profile = {
-            ...updates,
-            photoURL: newPhotoURL,
-        };
-        
-        const userDocRef = doc(db, 'userData', user.uid);
-        
-        try {
-            await setDoc(userDocRef, { profile: completeProfile }, { merge: true });
-            setView('home');
-            setActivePortfolioId(null);
-        } catch (error) {
-            console.error("Error saving profile to Firestore:", error);
-            alert(t('profileUpdateSaveError'));
-            throw error; // Propagate error to the caller
-        }
-    };
-
 
   const handleSetup = (portfolioName: string, initialCapital: number, targetAmount: number, currency: string) => {
     const newPortfolio: Portfolio = {
@@ -1574,8 +1221,6 @@ function App() {
 
   const renderContent = () => {
     switch (view) {
-      case 'profile':
-        return <ProfilePage user={user} profile={profile} onUpdate={handleProfileUpdate} onBack={goHome} t={t} language={language} />;
       case 'expenses':
           return <ExpensesPage onBack={goHome} />;
       case 'home':
@@ -1734,9 +1379,8 @@ function App() {
                  <div className="flex items-center gap-2 sm:gap-4">
                     <ThemeToggleButton theme={theme} setTheme={setTheme} />
                     <UserMenu 
-                        profile={profile}
+                        user={user}
                         portfolios={portfolios}
-                        onProfileClick={() => { setView('profile'); setActivePortfolioId(null); setIsAddingPortfolio(false); }}
                         onPortfolioClick={handleNavigateToPortfolio}
                         onExpensesClick={handleNavigateToExpenses}
                         onLogout={() => signOut(auth)}
