@@ -268,6 +268,14 @@ const arTranslations = {
     saving: 'جارٍ الحفظ...',
     back: 'رجوع',
     profile: 'الملف الشخصي',
+    addressLabel: 'العنوان',
+    addressPlaceholder: 'شارع، مبنى، شقة',
+    phoneNumberLabel: 'رقم الهاتف',
+    phoneNumberPlaceholder: '+201234567890',
+    countryLabel: 'الدولة',
+    cityLabel: 'المدينة',
+    selectCountry: 'اختر الدولة',
+    selectCity: 'اختر المدينة',
 };
 
 const enTranslations: Record<string, string> = {
@@ -495,6 +503,14 @@ const enTranslations: Record<string, string> = {
     saving: 'Saving...',
     back: 'Back',
     profile: 'Profile',
+    addressLabel: 'Address',
+    addressPlaceholder: 'Street, Building, Apartment',
+    phoneNumberLabel: 'Phone Number',
+    phoneNumberPlaceholder: '+1 (555) 123-4567',
+    countryLabel: 'Country',
+    cityLabel: 'City',
+    selectCountry: 'Select Country',
+    selectCity: 'Select City',
 };
 
 const translations = {
@@ -502,10 +518,30 @@ const translations = {
     en: enTranslations,
 };
 
+const countryCityData = {
+    ar: {
+        'مصر': ['القاهرة', 'الإسكندرية', 'الجيزة', 'الأقصر'],
+        'المملكة العربية السعودية': ['الرياض', 'جدة', 'مكة', 'المدينة المنورة', 'الدمام'],
+        'الإمارات العربية المتحدة': ['دبي', 'أبو ظبي', 'الشارقة', 'عجمان'],
+        'الولايات المتحدة': ['نيويورك', 'لوس أنجلوس', 'شيكاغو', 'هيوستن']
+    },
+    en: {
+        'Egypt': ['Cairo', 'Alexandria', 'Giza', 'Luxor'],
+        'Saudi Arabia': ['Riyadh', 'Jeddah', 'Mecca', 'Medina', 'Dammam'],
+        'United Arab Emirates': ['Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman'],
+        'United States': ['New York', 'Los Angeles', 'Chicago', 'Houston']
+    }
+};
+
+
 type Language = 'ar' | 'en';
 interface Profile {
     displayName: string;
     photoURL: string;
+    address?: string;
+    country?: string;
+    city?: string;
+    phoneNumber?: string;
 }
 
 const getFirebaseAuthErrorMessage = (error: any, t: (key: string) => string) => {
@@ -947,15 +983,29 @@ const LoginPage: React.FC<{
 const ProfilePage: React.FC<{
     user: User;
     profile: Profile | null;
-    onUpdate: (newName: string, newImageFile: File | null) => Promise<void>;
+    onUpdate: (updates: Omit<Profile, 'photoURL'>, newImageFile: File | null) => Promise<void>;
     onBack: () => void;
     t: (key: string) => string;
-}> = ({ user, profile, onUpdate, onBack, t }) => {
+    language: Language;
+}> = ({ user, profile, onUpdate, onBack, t, language }) => {
     const [displayName, setDisplayName] = useState(profile?.displayName || '');
+    const [address, setAddress] = useState(profile?.address || '');
+    const [phoneNumber, setPhoneNumber] = useState(profile?.phoneNumber || '');
+    const [country, setCountry] = useState(profile?.country || '');
+    const [city, setCity] = useState(profile?.city || '');
+    
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(profile?.photoURL || null);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const countries = useMemo(() => Object.keys(countryCityData[language]), [language]);
+    const cities = useMemo(() => country ? countryCityData[language][country as keyof typeof countryCityData[Language]] || [] : [], [country, language]);
+
+    const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setCountry(e.target.value);
+        setCity(''); // Reset city when country changes
+    };
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -972,7 +1022,14 @@ const ProfilePage: React.FC<{
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSaving(true);
-        await onUpdate(displayName, imageFile);
+        const profileUpdates = {
+            displayName,
+            address,
+            phoneNumber,
+            country,
+            city,
+        };
+        await onUpdate(profileUpdates, imageFile);
         setIsSaving(false);
     };
 
@@ -1007,17 +1064,70 @@ const ProfilePage: React.FC<{
                     </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('displayNameLabel')}</label>
+                        <input
+                            type="text"
+                            id="displayName"
+                            value={displayName}
+                            onChange={(e) => setDisplayName(e.target.value)}
+                            className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
+                            placeholder={t('displayNamePlaceholder')}
+                            required
+                        />
+                    </div>
+                     <div>
+                        <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('phoneNumberLabel')}</label>
+                        <input
+                            type="tel"
+                            id="phoneNumber"
+                            value={phoneNumber}
+                            onChange={(e) => setPhoneNumber(e.target.value)}
+                            className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
+                            placeholder={t('phoneNumberPlaceholder')}
+                        />
+                    </div>
+                </div>
+
                 <div>
-                    <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('displayNameLabel')}</label>
+                    <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('addressLabel')}</label>
                     <input
                         type="text"
-                        id="displayName"
-                        value={displayName}
-                        onChange={(e) => setDisplayName(e.target.value)}
+                        id="address"
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
                         className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
-                        placeholder={t('displayNamePlaceholder')}
-                        required
+                        placeholder={t('addressPlaceholder')}
                     />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div>
+                        <label htmlFor="country" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('countryLabel')}</label>
+                        <select
+                            id="country"
+                            value={country}
+                            onChange={handleCountryChange}
+                            className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
+                        >
+                            <option value="">{t('selectCountry')}</option>
+                            {countries.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('cityLabel')}</label>
+                        <select
+                            id="city"
+                            value={city}
+                            onChange={(e) => setCity(e.target.value)}
+                            className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
+                            disabled={!country}
+                        >
+                            <option value="">{t('selectCity')}</option>
+                            {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
                 </div>
 
                 <div>
@@ -1152,7 +1262,14 @@ function App() {
             const docSnap = await getDoc(userDocRef);
             if (!docSnap.exists() || !docSnap.data().profile) {
                 const defaultDisplayName = currentUser.email?.split('@')[0] || 'User';
-                const defaultProfile = { displayName: defaultDisplayName, photoURL: '' };
+                const defaultProfile: Profile = { 
+                    displayName: defaultDisplayName, 
+                    photoURL: '',
+                    address: '',
+                    country: '',
+                    city: '',
+                    phoneNumber: ''
+                };
                 await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] }, { merge: true });
             }
           }
@@ -1227,7 +1344,7 @@ function App() {
       }
   };
 
-   const handleProfileUpdate = async (newName: string, newImageFile: File | null) => {
+   const handleProfileUpdate = async (updates: Omit<Profile, 'photoURL'>, newImageFile: File | null) => {
         if (!user || !profile) return;
         
         let newPhotoURL = profile.photoURL;
@@ -1242,7 +1359,7 @@ function App() {
             }
         }
         
-        const updatedProfile = { displayName: newName, photoURL: newPhotoURL };
+        const updatedProfile = { ...profile, ...updates, photoURL: newPhotoURL };
         const userDocRef = doc(db, 'userData', user.uid);
         await setDoc(userDocRef, { profile: updatedProfile }, { merge: true });
 
@@ -1332,7 +1449,7 @@ function App() {
 
       <main className="container mx-auto p-4 sm:p-6 lg:p-8">
         {view === 'profile' ? (
-            <ProfilePage user={user} profile={profile} onUpdate={handleProfileUpdate} onBack={goHome} t={t} />
+            <ProfilePage user={user} profile={profile} onUpdate={handleProfileUpdate} onBack={goHome} t={t} language={language} />
         ) : !activePortfolio ? (
             portfolios.length === 0 ? (
                 <SetupForm onSetup={handleSetup} t={t} />
