@@ -22,7 +22,7 @@ import Dashboard from './components/Dashboard';
 import { sendNotification } from './utils/notifications';
 import { formatCurrency as formatCurrencyUtil } from './utils/formatters';
 import ThemeToggleButton from './components/ThemeToggleButton';
-import { EditIcon, TrashIcon, UserIcon } from './components/Icons';
+import { EditIcon, TrashIcon, UserIcon, LogoutIcon } from './components/Icons';
 import EditPortfolioNameModal from './components/EditPortfolioNameModal';
 import ConfirmModal from './components/ConfirmModal';
 
@@ -1166,11 +1166,9 @@ const ProfilePage: React.FC<{
 const UserMenu: React.FC<{
     profile: Profile | null;
     onProfileClick: () => void;
-    onLogoutClick: () => void;
     children: React.ReactNode;
-    // FIX: Add 't' function prop for translations
     t: (key: string) => string;
-}> = ({ profile, onProfileClick, onLogoutClick, children, t }) => {
+}> = ({ profile, onProfileClick, children, t }) => {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -1188,8 +1186,10 @@ const UserMenu: React.FC<{
 
     return (
         <div className="relative" ref={menuRef}>
-            <button onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2">
-                {children}
+            <button 
+                onClick={() => setIsOpen(!isOpen)} 
+                className="flex items-center gap-3 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            >
                 <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
                     {profile?.photoURL ? (
                         <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" />
@@ -1197,13 +1197,15 @@ const UserMenu: React.FC<{
                         <span className="font-bold text-cyan-600 dark:text-cyan-400">{initials}</span>
                     )}
                 </div>
+                 <div className="hidden sm:flex flex-col items-start rtl:items-end">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate max-w-28">{profile?.displayName || '...'}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{t('profile')}</span>
+                </div>
             </button>
             {isOpen && (
                 <div className="absolute top-full mt-2 right-0 rtl:right-auto rtl:left-0 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-20 py-1">
                     <button onClick={() => { onProfileClick(); setIsOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">{t('profile')}</button>
                     {children}
-                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
-                    <button onClick={onLogoutClick} className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">{t('logoutButton')}</button>
                 </div>
             )}
         </div>
@@ -1218,7 +1220,7 @@ function App() {
 
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Always start in a loading state
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null);
   const [view, setView] = useState<'home' | 'profile'>('home');
@@ -1255,85 +1257,75 @@ function App() {
     }
   }, [theme]);
   
-  // Consolidated effect for authentication, session, and data management
+  // Effect 1: Manages auth state changes. Runs only once to set up the listener.
   useEffect(() => {
-    let unsubscribeData: Unsubscribe | undefined;
-    let unsubscribeSession: Unsubscribe | undefined;
+    const unsubscribeAuth = onAuthStateChanged(auth, setUser);
+    return () => unsubscribeAuth();
+  }, []);
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      // Clean up previous user's listeners first
-      if (unsubscribeData) unsubscribeData();
-      if (unsubscribeSession) unsubscribeSession();
+  // Effect 2: Manages all data and session logic based on the user's auth state.
+  useEffect(() => {
+    if (user) {
+      // User is logged in. Set up listeners for their data.
+      let unsubscribeData: Unsubscribe | undefined;
+      let unsubscribeSession: Unsubscribe | undefined;
 
-      // Reset state for any user change (login/logout)
-      setPortfolios([]);
-      setProfile(null);
-      setUser(currentUser);
-
-      if (currentUser) {
-        // --- SET UP LISTENERS FOR LOGGED-IN USER ---
-
-        // 1. Session listener for multi-device logout
-        const sessionDocRef = doc(db, "userSessions", currentUser.uid);
-        unsubscribeSession = onSnapshot(sessionDocRef, (docSnapshot) => {
-          const localSessionId = localStorage.getItem('localSessionId');
-          if (docSnapshot.exists() && localSessionId) {
-            const firestoreSessionId = docSnapshot.data().sessionId;
-            if (firestoreSessionId !== localSessionId) {
-              alert(t('multiDeviceLogout'));
-              signOut(auth).catch(error => console.error("Error signing out:", error));
-            }
+      // 1. Session listener for multi-device logout
+      const sessionDocRef = doc(db, "userSessions", user.uid);
+      unsubscribeSession = onSnapshot(sessionDocRef, (docSnapshot) => {
+        const localSessionId = localStorage.getItem('localSessionId');
+        if (docSnapshot.exists() && localSessionId) {
+          const firestoreSessionId = docSnapshot.data().sessionId;
+          if (firestoreSessionId !== localSessionId) {
+            alert(t('multiDeviceLogout'));
+            signOut(auth).catch(error => console.error("Error signing out:", error));
           }
-        }, (error) => {
-          console.error("Error listening to session changes:", error);
-        });
+        }
+      }, (error) => {
+        console.error("Error listening to session changes:", error);
+      });
 
-        // 2. Data listener for portfolios and profile
-        const userDocRef = doc(db, 'userData', currentUser.uid);
-        unsubscribeData = onSnapshot(userDocRef, async (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setPortfolios(data.portfolios && Array.isArray(data.portfolios) ? data.portfolios : []);
-            setProfile(data.profile || null);
-          } else {
-            // If user doc doesn't exist, create it.
-            try {
-              const defaultDisplayName = currentUser.email?.split('@')[0] || 'User';
-              const defaultProfile: Profile = {
-                displayName: defaultDisplayName,
-                photoURL: '',
-                address: '',
-                country: '',
-                city: '',
-                phoneNumber: ''
-              };
-              await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] });
-              // Listener will fire again automatically with the new data
-            } catch (error) {
-              console.error("Error creating user document:", error);
-              await signOut(auth); // Sign out on creation error
-            }
+      // 2. Data listener for portfolios and profile
+      const userDocRef = doc(db, 'userData', user.uid);
+      unsubscribeData = onSnapshot(userDocRef, async (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setPortfolios(data.portfolios && Array.isArray(data.portfolios) ? data.portfolios : []);
+          setProfile(data.profile || null);
+        } else {
+          // If user doc doesn't exist, create it.
+          try {
+            const defaultDisplayName = user.email?.split('@')[0] || 'User';
+            const defaultProfile: Profile = {
+              displayName: defaultDisplayName,
+              photoURL: '', address: '', country: '', city: '', phoneNumber: ''
+            };
+            await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] });
+            // Listener will fire again automatically with the new data, so we don't set state here.
+          } catch (error) {
+            console.error("Error creating user document:", error);
+            await signOut(auth);
           }
-          setLoading(false);
-        }, async (error) => {
-          console.error("Error listening to user data:", error);
-          await signOut(auth); // Sign out on listener error
-          setLoading(false);
-        });
-
-      } else {
-        // --- NO USER ---
+        }
+        setLoading(false); // Data is loaded or creation is handled, stop loading.
+      }, async (error) => {
+        console.error("Error listening to user data:", error);
+        await signOut(auth);
         setLoading(false);
-      }
-    });
+      });
+      
+      return () => {
+        if (unsubscribeData) unsubscribeData();
+        if (unsubscribeSession) unsubscribeSession();
+      };
+    } else {
+      // User is not logged in or has logged out.
+      setProfile(null);
+      setPortfolios([]);
+      setLoading(false); // Stop loading.
+    }
+  }, [user, t]);
 
-    // Cleanup function for when the component unmounts
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeData) unsubscribeData();
-      if (unsubscribeSession) unsubscribeSession();
-    };
-  }, [t]); // Dependency: 't' function for the alert message.
 
   const activePortfolio = useMemo(() => {
     return portfolios.find(p => p.id === activePortfolioId) || null;
@@ -1439,18 +1431,26 @@ function App() {
                 <div className="flex items-center cursor-pointer" onClick={goHome}>
                     <h1 className="text-xl font-bold text-cyan-600 dark:text-cyan-400">{t('appName')}</h1>
                 </div>
-                <UserMenu 
-                    profile={profile}
-                    onProfileClick={() => { setView('profile'); setActivePortfolioId(null); }}
-                    onLogoutClick={() => signOut(auth)}
-                    // FIX: Pass the 't' function to the UserMenu component
-                    t={t}
-                >
-                    <div className="px-4 pt-2 pb-1">
-                        <ThemeToggleButton theme={theme} setTheme={setTheme} />
-                    </div>
-                    <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />
-                </UserMenu>
+                 <div className="flex items-center gap-2 sm:gap-4">
+                    <ThemeToggleButton theme={theme} setTheme={setTheme} />
+                    <UserMenu 
+                        profile={profile}
+                        onProfileClick={() => { setView('profile'); setActivePortfolioId(null); }}
+                        t={t}
+                    >
+                         <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                        <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />
+                    </UserMenu>
+                    <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
+                     <button 
+                        onClick={() => signOut(auth)}
+                        className="flex items-center gap-2 p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors"
+                        title={t('logoutButton')}
+                    >
+                        <LogoutIcon />
+                        <span className="hidden sm:inline font-semibold text-sm">{t('logoutButton')}</span>
+                    </button>
+                </div>
             </div>
         </nav>
       </header>
