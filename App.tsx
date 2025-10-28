@@ -1255,80 +1255,85 @@ function App() {
     }
   }, [theme]);
   
-  // Handles authentication state changes
+  // Consolidated effect for authentication, session, and data management
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    let unsubscribeData: Unsubscribe | undefined;
+    let unsubscribeSession: Unsubscribe | undefined;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+      // Clean up previous user's listeners first
+      if (unsubscribeData) unsubscribeData();
+      if (unsubscribeSession) unsubscribeSession();
+
+      // Reset state for any user change (login/logout)
+      setPortfolios([]);
+      setProfile(null);
       setUser(currentUser);
-      if (!currentUser) {
+
+      if (currentUser) {
+        // --- SET UP LISTENERS FOR LOGGED-IN USER ---
+
+        // 1. Session listener for multi-device logout
+        const sessionDocRef = doc(db, "userSessions", currentUser.uid);
+        unsubscribeSession = onSnapshot(sessionDocRef, (docSnapshot) => {
+          const localSessionId = localStorage.getItem('localSessionId');
+          if (docSnapshot.exists() && localSessionId) {
+            const firestoreSessionId = docSnapshot.data().sessionId;
+            if (firestoreSessionId !== localSessionId) {
+              alert(t('multiDeviceLogout'));
+              signOut(auth).catch(error => console.error("Error signing out:", error));
+            }
+          }
+        }, (error) => {
+          console.error("Error listening to session changes:", error);
+        });
+
+        // 2. Data listener for portfolios and profile
+        const userDocRef = doc(db, 'userData', currentUser.uid);
+        unsubscribeData = onSnapshot(userDocRef, async (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setPortfolios(data.portfolios && Array.isArray(data.portfolios) ? data.portfolios : []);
+            setProfile(data.profile || null);
+          } else {
+            // If user doc doesn't exist, create it.
+            try {
+              const defaultDisplayName = currentUser.email?.split('@')[0] || 'User';
+              const defaultProfile: Profile = {
+                displayName: defaultDisplayName,
+                photoURL: '',
+                address: '',
+                country: '',
+                city: '',
+                phoneNumber: ''
+              };
+              await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] });
+              // Listener will fire again automatically with the new data
+            } catch (error) {
+              console.error("Error creating user document:", error);
+              await signOut(auth); // Sign out on creation error
+            }
+          }
+          setLoading(false);
+        }, async (error) => {
+          console.error("Error listening to user data:", error);
+          await signOut(auth); // Sign out on listener error
+          setLoading(false);
+        });
+
+      } else {
+        // --- NO USER ---
         setLoading(false);
       }
     });
-    return () => unsubscribe();
-  }, []);
 
-  // Handles multi-device session logout
-  useEffect(() => {
-    if (!user) return;
-
-    const sessionDocRef = doc(db, "userSessions", user.uid);
-    const unsubscribe = onSnapshot(sessionDocRef, (docSnapshot) => {
-        const localSessionId = localStorage.getItem('localSessionId');
-        if (docSnapshot.exists() && localSessionId) {
-            const firestoreSessionId = docSnapshot.data().sessionId;
-            if (firestoreSessionId !== localSessionId) {
-                alert(t('multiDeviceLogout')); 
-                signOut(auth).catch(error => console.error("Error signing out:", error));
-            }
-        }
-    }, (error) => {
-        console.error("Error listening to session changes:", error);
-    });
-
-    return () => unsubscribe();
-  }, [user, t]);
-
-  // Handles user data fetching and creation
-  useEffect(() => {
-    if (!user) {
-      setPortfolios([]);
-      setProfile(null);
-      return;
-    }
-
-    const userDocRef = doc(db, 'userData', user.uid);
-    const unsubscribe = onSnapshot(userDocRef, async (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setPortfolios(data.portfolios && Array.isArray(data.portfolios) ? data.portfolios : []);
-        setProfile(data.profile || null);
-      } else {
-        // User is authenticated, but no data document exists. Create it.
-        try {
-          const defaultDisplayName = user.email?.split('@')[0] || 'User';
-          const defaultProfile: Profile = {
-            displayName: defaultDisplayName,
-            photoURL: '',
-            address: '',
-            country: '',
-            city: '',
-            phoneNumber: ''
-          };
-          await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] });
-          // State will be updated by the listener firing again with the new doc.
-        } catch (error) {
-          console.error("Error creating user document:", error);
-          await signOut(auth); // Sign out on error to prevent broken state
-        }
-      }
-      setLoading(false);
-    }, async (error) => {
-      console.error("Error listening to user data:", error);
-      await signOut(auth); // Sign out on error
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+    // Cleanup function for when the component unmounts
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeData) unsubscribeData();
+      if (unsubscribeSession) unsubscribeSession();
+    };
+  }, [t]); // Dependency: 't' function for the alert message.
 
   const activePortfolio = useMemo(() => {
     return portfolios.find(p => p.id === activePortfolioId) || null;
