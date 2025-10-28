@@ -1006,6 +1006,8 @@ const ProfilePage: React.FC<{
     t: (key: string) => string;
     language: Language;
 }> = ({ user, profile, onUpdate, onBack, t, language }) => {
+    // Definitive Fix: Initialize state from props ONCE. This component now "owns" the form state.
+    // It will not be overwritten by parent re-renders, fixing the data loss bug.
     const [formData, setFormData] = useState<ProfileFormData>({
         displayName: profile?.displayName || '',
         address: profile?.address || '',
@@ -1017,25 +1019,6 @@ const ProfilePage: React.FC<{
     const [imagePreview, setImagePreview] = useState<string | null>(profile?.photoURL || null);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const prevProfileRef = useRef<Profile | null>(profile);
-
-    useEffect(() => {
-        // This effect syncs the form state with the profile prop from the App state.
-        // It's designed to only update the form if the data from Firestore is genuinely different
-        // from what's currently being displayed, preventing the user's input from being overwritten
-        // by a re-render with the same data.
-        if (profile && profile !== prevProfileRef.current) {
-            setFormData({
-                displayName: profile.displayName || '',
-                address: profile.address || '',
-                phoneNumber: profile.phoneNumber || '',
-                country: profile.country || '',
-                city: profile.city || '',
-            });
-            setImagePreview(profile.photoURL || null);
-            prevProfileRef.current = profile;
-        }
-    }, [profile]);
 
     const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { id, value } = e.target;
