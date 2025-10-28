@@ -1,5 +1,6 @@
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
@@ -12,7 +13,8 @@ import {
   type User,
   type Auth
 } from 'firebase/auth';
-import { getFirestore, doc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, onSnapshot, getDoc, Unsubscribe } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import type { Portfolio, Trade, Target } from './types';
 import SetupForm from './components/SetupForm';
@@ -20,7 +22,7 @@ import Dashboard from './components/Dashboard';
 import { sendNotification } from './utils/notifications';
 import { formatCurrency as formatCurrencyUtil } from './utils/formatters';
 import ThemeToggleButton from './components/ThemeToggleButton';
-import { EditIcon, TrashIcon } from './components/Icons';
+import { EditIcon, TrashIcon, UserIcon } from './components/Icons';
 import EditPortfolioNameModal from './components/EditPortfolioNameModal';
 import ConfirmModal from './components/ConfirmModal';
 
@@ -37,6 +39,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 
 // Fix: Moved translations to be defined within the file, as new files cannot be created.
 // This resolves the multiple default export errors and the incorrect import.
@@ -255,6 +258,16 @@ const arTranslations = {
     switchToArabic: 'التحويل إلى العربية',
     myFirstPortfolio: 'محفظتي الأولى',
     myPortfolio: 'محفظتي',
+    // Profile
+    profilePageTitle: 'الملف الشخصي',
+    displayNameLabel: 'الاسم المعروض',
+    displayNamePlaceholder: 'اسمك الكامل',
+    changeProfilePicture: 'تغيير الصورة',
+    profileEmailNotEditable: 'البريد الإلكتروني لتسجيل الدخول (غير قابل للتعديل)',
+    saveProfile: 'حفظ الملف الشخصي',
+    saving: 'جارٍ الحفظ...',
+    back: 'رجوع',
+    profile: 'الملف الشخصي',
 };
 
 const enTranslations: Record<string, string> = {
@@ -472,6 +485,16 @@ const enTranslations: Record<string, string> = {
     switchToArabic: 'Switch to Arabic',
     myFirstPortfolio: 'My First Portfolio',
     myPortfolio: 'My Portfolio',
+    // Profile
+    profilePageTitle: 'Profile',
+    displayNameLabel: 'Display Name',
+    displayNamePlaceholder: 'Your full name',
+    changeProfilePicture: 'Change Picture',
+    profileEmailNotEditable: 'Login Email (cannot be changed)',
+    saveProfile: 'Save Profile',
+    saving: 'Saving...',
+    back: 'Back',
+    profile: 'Profile',
 };
 
 const translations = {
@@ -480,6 +503,10 @@ const translations = {
 };
 
 type Language = 'ar' | 'en';
+interface Profile {
+    displayName: string;
+    photoURL: string;
+}
 
 const getFirebaseAuthErrorMessage = (error: any, t: (key: string) => string) => {
     switch (error.code) {
@@ -509,10 +536,10 @@ const LanguageToggleButton: React.FC<{ language: Language, setLanguage: (lang: L
     return (
         <button
             onClick={toggleLanguage}
-            className="p-2 w-12 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-bold"
+            className="p-2 w-full text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
             aria-label={language === 'ar' ? t('switchToEnglish') : t('switchToArabic')}
         >
-            {language === 'ar' ? 'EN' : 'AR'}
+            {language === 'ar' ? t('switchToEnglish') : t('switchToArabic')}
         </button>
     );
 };
@@ -917,6 +944,162 @@ const LoginPage: React.FC<{
     );
 };
 
+const ProfilePage: React.FC<{
+    user: User;
+    profile: Profile | null;
+    onUpdate: (newName: string, newImageFile: File | null) => Promise<void>;
+    onBack: () => void;
+    t: (key: string) => string;
+}> = ({ user, profile, onUpdate, onBack, t }) => {
+    const [displayName, setDisplayName] = useState(profile?.displayName || '');
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(profile?.photoURL || null);
+    const [isSaving, setIsSaving] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setImageFile(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setImagePreview(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        await onUpdate(displayName, imageFile);
+        setIsSaving(false);
+    };
+
+    return (
+        <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-xl shadow-2xl shadow-cyan-500/10 animate-fade-in">
+            <h2 className="text-2xl font-bold text-center mb-6 text-cyan-600 dark:text-cyan-400">{t('profilePageTitle')}</h2>
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="flex flex-col items-center space-y-4">
+                    <div className="relative">
+                        <div className="w-32 h-32 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+                            {imagePreview ? (
+                                <img src={imagePreview} alt="Profile Preview" className="w-full h-full object-cover" />
+                            ) : (
+                                <UserIcon />
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="absolute bottom-0 right-0 bg-cyan-600 hover:bg-cyan-700 text-white p-2 rounded-full shadow-md"
+                            aria-label={t('changeProfilePicture')}
+                        >
+                           <EditIcon />
+                        </button>
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleImageChange}
+                            accept="image/png, image/jpeg, image/gif"
+                            className="hidden"
+                        />
+                    </div>
+                </div>
+
+                <div>
+                    <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('displayNameLabel')}</label>
+                    <input
+                        type="text"
+                        id="displayName"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        className="mt-1 w-full bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-md p-3 focus:ring-2 focus:ring-cyan-500 outline-none transition"
+                        placeholder={t('displayNamePlaceholder')}
+                        required
+                    />
+                </div>
+
+                <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('profileEmailNotEditable')}</label>
+                    <input
+                        type="email"
+                        id="email"
+                        value={user.email || ''}
+                        disabled
+                        className="mt-1 w-full bg-gray-200 dark:bg-gray-900/50 border border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 rounded-md p-3 cursor-not-allowed"
+                    />
+                </div>
+
+                <div className="flex items-center gap-4 pt-4">
+                     <button
+                        type="button"
+                        onClick={onBack}
+                        className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-md transition"
+                    >
+                        {t('back')}
+                    </button>
+                    <button
+                        type="submit"
+                        disabled={isSaving}
+                        className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isSaving ? t('saving') : t('saveProfile')}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+
+const UserMenu: React.FC<{
+    profile: Profile | null;
+    onProfileClick: () => void;
+    onLogoutClick: () => void;
+    children: React.ReactNode;
+    // FIX: Add 't' function prop for translations
+    t: (key: string) => string;
+}> = ({ profile, onProfileClick, onLogoutClick, children, t }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const initials = profile?.displayName ? profile.displayName.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
+
+    return (
+        <div className="relative" ref={menuRef}>
+            <button onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2">
+                {children}
+                <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
+                    {profile?.photoURL ? (
+                        <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                        <span className="font-bold text-cyan-600 dark:text-cyan-400">{initials}</span>
+                    )}
+                </div>
+            </button>
+            {isOpen && (
+                <div className="absolute top-full mt-2 right-0 rtl:right-auto rtl:left-0 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-20 py-1">
+                    <button onClick={() => { onProfileClick(); setIsOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">{t('profile')}</button>
+                    {children}
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                    <button onClick={onLogoutClick} className="block w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">{t('logoutButton')}</button>
+                </div>
+            )}
+        </div>
+    );
+};
+
 
 function App() {
   const defaultLang = navigator.language.startsWith('ar') ? 'ar' : 'en';
@@ -924,9 +1107,11 @@ function App() {
   const [theme, setTheme] = useLocalStorage<'light' | 'dark'>('theme', 'dark');
 
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [activePortfolioId, setActivePortfolioId] = useState<string | null>(null);
+  const [view, setView] = useState<'home' | 'profile'>('home');
 
   const t = useCallback((key: string): string => {
     const translation = translations[language][key] || translations['en'][key];
@@ -961,9 +1146,18 @@ function App() {
   }, [theme]);
   
   useEffect(() => {
-      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+          if (currentUser) {
+            const userDocRef = doc(db, 'userData', currentUser.uid);
+            const docSnap = await getDoc(userDocRef);
+            if (!docSnap.exists() || !docSnap.data().profile) {
+                const defaultDisplayName = currentUser.email?.split('@')[0] || 'User';
+                const defaultProfile = { displayName: defaultDisplayName, photoURL: '' };
+                await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] }, { merge: true });
+            }
+          }
           setUser(currentUser);
-          setLoading(false);
+          if (!currentUser) setLoading(false);
       });
       return () => unsubscribe();
   }, []);
@@ -995,6 +1189,7 @@ function App() {
   useEffect(() => {
     if (!user) {
         setPortfolios([]);
+        setProfile(null);
         return;
     }
     const userDocRef = doc(db, 'userData', user.uid);
@@ -1002,15 +1197,18 @@ function App() {
         if (docSnap.exists()) {
             const data = docSnap.data();
             setPortfolios(data.portfolios && Array.isArray(data.portfolios) ? data.portfolios : []);
+            setProfile(data.profile || null);
         } else {
             setPortfolios([]);
+            setProfile(null);
         }
+        setLoading(false); // Data loaded or confirmed not to exist
     }, (error) => {
-        console.error("Error listening to portfolio data:", error);
+        console.error("Error listening to user data:", error);
+        setLoading(false);
     });
     return () => unsubscribe();
   }, [user]);
-
 
   const activePortfolio = useMemo(() => {
     return portfolios.find(p => p.id === activePortfolioId) || null;
@@ -1023,11 +1221,35 @@ function App() {
 
   const savePortfoliosToFirestore = (newPortfolios: Portfolio[]) => {
       if (user) {
-          setDoc(doc(db, 'userData', user.uid), { portfolios: newPortfolios }).catch(error => {
+          setDoc(doc(db, 'userData', user.uid), { portfolios: newPortfolios }, { merge: true }).catch(error => {
               console.error("Error saving portfolios:", error);
           });
       }
   };
+
+   const handleProfileUpdate = async (newName: string, newImageFile: File | null) => {
+        if (!user || !profile) return;
+        
+        let newPhotoURL = profile.photoURL;
+
+        if (newImageFile) {
+            const storageRef = ref(storage, `profile_images/${user.uid}`);
+            try {
+                const snapshot = await uploadBytes(storageRef, newImageFile);
+                newPhotoURL = await getDownloadURL(snapshot.ref);
+            } catch (error) {
+                console.error("Error uploading profile image:", error);
+            }
+        }
+        
+        const updatedProfile = { displayName: newName, photoURL: newPhotoURL };
+        const userDocRef = doc(db, 'userData', user.uid);
+        await setDoc(userDocRef, { profile: updatedProfile }, { merge: true });
+
+        setView('home');
+        setActivePortfolioId(null);
+    };
+
 
   const handleSetup = (portfolioName: string, initialCapital: number, targetAmount: number, currency: string) => {
     const newPortfolio: Portfolio = {
@@ -1079,27 +1301,39 @@ function App() {
      />;
   }
 
+  const goHome = () => {
+    setView('home');
+    setActivePortfolioId(null);
+  };
+
   return (
     <div dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
       <header className="bg-white dark:bg-gray-800 shadow-md">
         <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
-                <div className="flex items-center">
+                <div className="flex items-center cursor-pointer" onClick={goHome}>
                     <h1 className="text-xl font-bold text-cyan-600 dark:text-cyan-400">{t('appName')}</h1>
                 </div>
-                <div className="flex items-center gap-2">
+                <UserMenu 
+                    profile={profile}
+                    onProfileClick={() => { setView('profile'); setActivePortfolioId(null); }}
+                    onLogoutClick={() => signOut(auth)}
+                    // FIX: Pass the 't' function to the UserMenu component
+                    t={t}
+                >
+                    <div className="px-4 pt-2 pb-1">
+                        <ThemeToggleButton theme={theme} setTheme={setTheme} />
+                    </div>
                     <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />
-                    <ThemeToggleButton theme={theme} setTheme={setTheme} />
-                    <button onClick={() => signOut(auth)} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 text-sm">
-                        {t('logoutButton')}
-                    </button>
-                </div>
+                </UserMenu>
             </div>
         </nav>
       </header>
 
       <main className="container mx-auto p-4 sm:p-6 lg:p-8">
-        {!activePortfolio ? (
+        {view === 'profile' ? (
+            <ProfilePage user={user} profile={profile} onUpdate={handleProfileUpdate} onBack={goHome} t={t} />
+        ) : !activePortfolio ? (
             portfolios.length === 0 ? (
                 <SetupForm onSetup={handleSetup} t={t} />
             ) : (
@@ -1231,7 +1465,7 @@ function App() {
                 onExportCSV={handleExportCSV}
                 onUpdateTargets={handleUpdateTargets}
                 onUpdateInitialCapital={handleUpdateInitialCapital}
-                onGoHome={() => setActivePortfolioId(null)}
+                onGoHome={goHome}
                 t={t}
                 language={language}
                 formatCurrency={(amount) => formatCurrency(amount, activePortfolio.currency)}
