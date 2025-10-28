@@ -277,6 +277,8 @@ const arTranslations = {
     cityLabel: 'المدينة',
     selectCountry: 'اختر الدولة',
     selectCity: 'اختر المدينة',
+    profileUpdateImageError: 'فشل تحميل الصورة. الرجاء المحاولة مرة أخرى.',
+    profileUpdateSaveError: 'فشل حفظ الملف الشخصي. الرجاء المحاولة مرة أخرى.',
 };
 
 const enTranslations: Record<string, string> = {
@@ -513,6 +515,8 @@ const enTranslations: Record<string, string> = {
     cityLabel: 'City',
     selectCountry: 'Select Country',
     selectCity: 'Select City',
+    profileUpdateImageError: 'Failed to upload image. Please try again.',
+    profileUpdateSaveError: 'Failed to save profile. Please try again.',
 };
 
 const translations = {
@@ -1007,7 +1011,9 @@ const ProfilePage: React.FC<{
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Effect to synchronize local state with props, fixing the stale state bug.
+    // This effect syncs the local form state with the profile prop from App state.
+    // The dependency array is specific to prevent re-running on every parent re-render
+    // if the profile data itself hasn't changed, which fixes the bug of overwriting user input.
     useEffect(() => {
         if (profile) {
             setDisplayName(profile.displayName || '');
@@ -1017,7 +1023,7 @@ const ProfilePage: React.FC<{
             setCity(profile.city || '');
             setImagePreview(profile.photoURL || null);
         }
-    }, [profile]);
+    }, [profile?.displayName, profile?.photoURL, profile?.address, profile?.phoneNumber, profile?.country, profile?.city]);
 
 
     const countries = useMemo(() => Object.keys(countryCityData[language]), [language]);
@@ -1054,6 +1060,7 @@ const ProfilePage: React.FC<{
             await onUpdate(profileUpdates, imageFile);
         } catch(error) {
             console.error("Failed to update profile", error);
+            // The onUpdate function itself will alert the user.
         } finally {
             setIsSaving(false);
         }
@@ -1404,13 +1411,11 @@ function App() {
    const handleProfileUpdate = async (updates: Omit<Profile, 'photoURL'>, newImageFile: File | null) => {
         if (!user) return;
 
+        // Start with a copy of the existing profile data to ensure no fields are accidentally lost
+        // then overwrite with the new updates from the form.
         const newProfileData: Profile = {
-            displayName: updates.displayName,
-            photoURL: profile?.photoURL || '', // Start with the existing photo URL
-            address: updates.address,
-            phoneNumber: updates.phoneNumber,
-            country: updates.country,
-            city: updates.city,
+            ...(profile || { displayName: '', photoURL: '' }),
+            ...updates,
         };
 
         if (newImageFile) {
@@ -1420,8 +1425,8 @@ function App() {
                 newProfileData.photoURL = await getDownloadURL(snapshot.ref);
             } catch (error) {
                 console.error("Error uploading profile image:", error);
-                // Optionally show an error to the user
-                return; // Stop the update if image upload fails
+                alert(t('profileUpdateImageError'));
+                throw error; // Throw error to stop the process and prevent isSaving from being set to false too early
             }
         }
         
@@ -1433,7 +1438,8 @@ function App() {
             setActivePortfolioId(null);
         } catch (error) {
             console.error("Error saving profile to Firestore:", error);
-            // Optionally show an error to the user that save failed
+            alert(t('profileUpdateSaveError'));
+            throw error; // Re-throw to be caught by the caller
         }
     };
 
