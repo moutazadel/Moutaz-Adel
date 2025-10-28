@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -1374,57 +1375,65 @@ function App() {
         console.error("Error listening to session changes:", error);
       });
 
-      // 2. Data listener for portfolios and profile with self-healing logic
+      // 2. Data listener for portfolios and profile.
       const userDocRef = doc(db, 'userData', user.uid);
-      unsubscribeData = onSnapshot(userDocRef, async (docSnap) => {
+      unsubscribeData = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
-          const data = docSnap.data();
-          // Ensure portfolios is always an array
-          setPortfolios(data.portfolios && Array.isArray(data.portfolios) ? data.portfolios : []);
+            const data = docSnap.data();
+            
+            // Ensure portfolios is always an array.
+            const portfoliosData = data.portfolios;
+            setPortfolios(Array.isArray(portfoliosData) ? portfoliosData : []);
 
-          // Robustly handle profile data
-          const profileData = data.profile;
-          const isValidProfile = profileData && typeof profileData === 'object' && !Array.isArray(profileData);
+            // Robustly handle profile data without self-healing writes.
+            const profileData = data.profile;
+            const isValidProfile = profileData && typeof profileData === 'object' && !Array.isArray(profileData);
 
-          if (isValidProfile) {
-            setProfile(profileData as Profile);
-          } else {
-            // If profile is missing or malformed, create a default one and merge it back.
-            // This prevents app crashes and self-heals corrupted data.
-            console.warn("User profile is missing or malformed. Resetting to default.");
-            const defaultDisplayName = user.email?.split('@')[0] || 'User';
-            const defaultProfile: Profile = {
-              displayName: defaultDisplayName,
-              photoURL: '', address: '', country: '', city: '', phoneNumber: ''
-            };
-            setProfile(defaultProfile); // Update local state immediately
-            try {
-              await setDoc(userDocRef, { profile: defaultProfile }, { merge: true });
-            } catch (error) {
-              console.error("Error resetting user profile in Firestore:", error);
+            if (isValidProfile) {
+                // Also ensure all expected keys are present to avoid crashes downstream.
+                const p = profileData as Partial<Profile>;
+                setProfile({
+                    displayName: p.displayName || user.email?.split('@')[0] || 'User',
+                    photoURL: p.photoURL || '',
+                    address: p.address || '',
+                    country: p.country || '',
+                    city: p.city || '',
+                    phoneNumber: p.phoneNumber || ''
+                });
+            } else {
+                // If profile is missing or malformed, use a default for this session.
+                // The user can fix it by saving their profile.
+                console.warn("User profile is missing or malformed. Using a default profile for this session.");
+                const defaultDisplayName = user.email?.split('@')[0] || 'User';
+                const defaultProfile: Profile = {
+                    displayName: defaultDisplayName,
+                    photoURL: '', address: '', country: '', city: '', phoneNumber: ''
+                };
+                setProfile(defaultProfile);
             }
-          }
+            setLoading(false);
         } else {
-          // If user doc doesn't exist, create it with defaults.
-          try {
+            // If user doc doesn't exist, create it. This is a one-time operation.
+            console.log("User document does not exist. Creating one...");
             const defaultDisplayName = user.email?.split('@')[0] || 'User';
             const defaultProfile: Profile = {
-              displayName: defaultDisplayName,
-              photoURL: '', address: '', country: '', city: '', phoneNumber: ''
+                displayName: defaultDisplayName,
+                photoURL: '', address: '', country: '', city: '', phoneNumber: ''
             };
-            await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] });
-            // The listener will fire again automatically with the new data.
-          } catch (error) {
-            console.error("Error creating user document:", error);
-            await signOut(auth);
-          }
+            // This write will trigger the onSnapshot listener again, which will then handle setting the state.
+            setDoc(userDocRef, { profile: defaultProfile, portfolios: [] }).catch(async (error) => {
+                console.error("CRITICAL: Failed to create user document.", error);
+                alert(t('loginErrorGeneric'));
+                await signOut(auth);
+                setLoading(false);
+            });
         }
-        setLoading(false);
-      }, async (error) => {
+    }, async (error) => {
         console.error("Error listening to user data:", error);
+        alert(t('loginErrorGeneric'));
         await signOut(auth);
         setLoading(false);
-      });
+    });
       
       return () => {
         if (unsubscribeData) unsubscribeData();
