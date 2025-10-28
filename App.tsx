@@ -258,6 +258,7 @@ const arTranslations = {
     switchToArabic: 'التحويل إلى العربية',
     myFirstPortfolio: 'محفظتي الأولى',
     myPortfolio: 'محفظتي',
+    myPortfolios: 'محافظي',
     // Profile
     profilePageTitle: 'الملف الشخصي',
     displayNameLabel: 'الاسم المعروض',
@@ -493,6 +494,7 @@ const enTranslations: Record<string, string> = {
     switchToArabic: 'Switch to Arabic',
     myFirstPortfolio: 'My First Portfolio',
     myPortfolio: 'My Portfolio',
+    myPortfolios: 'My Portfolios',
     // Profile
     profilePageTitle: 'Profile',
     displayNameLabel: 'Display Name',
@@ -876,7 +878,13 @@ const LoginPage: React.FC<{
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4 animate-fade-in">
             <div className="absolute top-4 right-4 rtl:right-auto rtl:left-4 flex items-center gap-2">
-                <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />
+                 <button
+                    onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
+                    className="p-2 w-full text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md"
+                    aria-label={language === 'ar' ? t('switchToEnglish') : t('switchToArabic')}
+                >
+                    {language === 'ar' ? 'EN' : 'AR'}
+                </button>
                 <ThemeToggleButton theme={theme} setTheme={setTheme} />
             </div>
 
@@ -1029,8 +1037,13 @@ const ProfilePage: React.FC<{
             country,
             city,
         };
-        await onUpdate(profileUpdates, imageFile);
-        setIsSaving(false);
+        try {
+            await onUpdate(profileUpdates, imageFile);
+        } catch(error) {
+            console.error("Failed to update profile", error);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -1165,10 +1178,14 @@ const ProfilePage: React.FC<{
 
 const UserMenu: React.FC<{
     profile: Profile | null;
+    portfolios: Portfolio[];
     onProfileClick: () => void;
-    children: React.ReactNode;
+    onPortfolioClick: (id: string) => void;
+    onLogout: () => void;
+    language: Language;
+    setLanguage: (lang: Language) => void;
     t: (key: string) => string;
-}> = ({ profile, onProfileClick, children, t }) => {
+}> = ({ profile, portfolios, onProfileClick, onPortfolioClick, onLogout, language, setLanguage, t }) => {
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -1182,13 +1199,13 @@ const UserMenu: React.FC<{
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const initials = profile?.displayName ? profile.displayName.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
+    const initials = profile?.displayName ? profile.displayName.split(' ').map(n => n[0]).join('').toUpperCase() : (profile?.displayName || '?');
 
     return (
         <div className="relative" ref={menuRef}>
             <button 
                 onClick={() => setIsOpen(!isOpen)} 
-                className="flex items-center gap-3 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="flex items-center gap-3 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             >
                 <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center overflow-hidden">
                     {profile?.photoURL ? (
@@ -1197,15 +1214,42 @@ const UserMenu: React.FC<{
                         <span className="font-bold text-cyan-600 dark:text-cyan-400">{initials}</span>
                     )}
                 </div>
-                 <div className="hidden sm:flex flex-col items-start rtl:items-end">
-                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate max-w-28">{profile?.displayName || '...'}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{t('profile')}</span>
+                 <div className="hidden sm:block text-left rtl:text-right">
+                    <span className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate max-w-28 block">{profile?.displayName || '...'}</span>
                 </div>
             </button>
             {isOpen && (
-                <div className="absolute top-full mt-2 right-0 rtl:right-auto rtl:left-0 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-20 py-1">
+                <div className="absolute top-full mt-2 right-0 rtl:right-auto rtl:left-0 w-60 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-20 py-1">
                     <button onClick={() => { onProfileClick(); setIsOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">{t('profile')}</button>
-                    {children}
+                    
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                    
+                     <div className="px-4 pt-2 pb-1 text-xs font-semibold text-gray-500 dark:text-gray-400">{t('myPortfolios')}</div>
+                     <div className="max-h-32 overflow-y-auto">
+                        {portfolios.map(p => (
+                            <button 
+                                key={p.id} 
+                                onClick={() => { onPortfolioClick(p.id); setIsOpen(false); }}
+                                className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 truncate"
+                                title={p.portfolioName}
+                            >
+                                {p.portfolioName}
+                            </button>
+                        ))}
+                        {portfolios.length === 0 && <span className="block px-4 py-2 text-sm text-gray-500">{t('noPortfolios')}</span>}
+                     </div>
+
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                    <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />
+
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                     <button 
+                        onClick={() => { onLogout(); setIsOpen(false); }}
+                        className="flex items-center gap-2 w-full text-left px-4 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                        <LogoutIcon />
+                        <span>{t('logoutButton')}</span>
+                    </button>
                 </div>
             )}
         </div>
@@ -1345,9 +1389,10 @@ function App() {
   };
 
    const handleProfileUpdate = async (updates: Omit<Profile, 'photoURL'>, newImageFile: File | null) => {
-        if (!user || !profile) return;
+        if (!user) return;
         
-        let newPhotoURL = profile.photoURL;
+        const userDocRef = doc(db, 'userData', user.uid);
+        let newPhotoURL = profile?.photoURL || '';
 
         if (newImageFile) {
             const storageRef = ref(storage, `profile_images/${user.uid}`);
@@ -1356,11 +1401,14 @@ function App() {
                 newPhotoURL = await getDownloadURL(snapshot.ref);
             } catch (error) {
                 console.error("Error uploading profile image:", error);
+                // Optionally show an error to the user
+                return; 
             }
         }
         
-        const updatedProfile = { ...profile, ...updates, photoURL: newPhotoURL };
-        const userDocRef = doc(db, 'userData', user.uid);
+        const currentProfileData = profile || { displayName: '', photoURL: '', address: '', country: '', city: '', phoneNumber: '' };
+        const updatedProfile = { ...currentProfileData, ...updates, photoURL: newPhotoURL };
+        
         await setDoc(userDocRef, { profile: updatedProfile }, { merge: true });
 
         setView('home');
@@ -1423,6 +1471,11 @@ function App() {
     setActivePortfolioId(null);
   };
 
+  const handleNavigateToPortfolio = (id: string) => {
+    setView('home');
+    setActivePortfolioId(id);
+  }
+
   return (
     <div dir={language === 'ar' ? 'rtl' : 'ltr'} className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
       <header className="bg-white dark:bg-gray-800 shadow-md">
@@ -1435,21 +1488,14 @@ function App() {
                     <ThemeToggleButton theme={theme} setTheme={setTheme} />
                     <UserMenu 
                         profile={profile}
+                        portfolios={portfolios}
                         onProfileClick={() => { setView('profile'); setActivePortfolioId(null); }}
+                        onPortfolioClick={handleNavigateToPortfolio}
+                        onLogout={() => signOut(auth)}
+                        language={language}
+                        setLanguage={setLanguage}
                         t={t}
-                    >
-                         <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
-                        <LanguageToggleButton language={language} setLanguage={setLanguage} t={t} />
-                    </UserMenu>
-                    <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
-                     <button 
-                        onClick={() => signOut(auth)}
-                        className="flex items-center gap-2 p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors"
-                        title={t('logoutButton')}
-                    >
-                        <LogoutIcon />
-                        <span className="hidden sm:inline font-semibold text-sm">{t('logoutButton')}</span>
-                    </button>
+                    />
                 </div>
             </div>
         </nav>
