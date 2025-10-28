@@ -996,16 +996,29 @@ const ProfilePage: React.FC<{
     t: (key: string) => string;
     language: Language;
 }> = ({ user, profile, onUpdate, onBack, t, language }) => {
-    const [displayName, setDisplayName] = useState(profile?.displayName || '');
-    const [address, setAddress] = useState(profile?.address || '');
-    const [phoneNumber, setPhoneNumber] = useState(profile?.phoneNumber || '');
-    const [country, setCountry] = useState(profile?.country || '');
-    const [city, setCity] = useState(profile?.city || '');
+    const [displayName, setDisplayName] = useState('');
+    const [address, setAddress] = useState('');
+    const [phoneNumber, setPhoneNumber] = useState('');
+    const [country, setCountry] = useState('');
+    const [city, setCity] = useState('');
     
     const [imageFile, setImageFile] = useState<File | null>(null);
-    const [imagePreview, setImagePreview] = useState<string | null>(profile?.photoURL || null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Effect to synchronize local state with props, fixing the stale state bug.
+    useEffect(() => {
+        if (profile) {
+            setDisplayName(profile.displayName || '');
+            setAddress(profile.address || '');
+            setPhoneNumber(profile.phoneNumber || '');
+            setCountry(profile.country || '');
+            setCity(profile.city || '');
+            setImagePreview(profile.photoURL || null);
+        }
+    }, [profile]);
+
 
     const countries = useMemo(() => Object.keys(countryCityData[language]), [language]);
     const cities = useMemo(() => country ? countryCityData[language][country as keyof typeof countryCityData[Language]] || [] : [], [country, language]);
@@ -1390,29 +1403,38 @@ function App() {
 
    const handleProfileUpdate = async (updates: Omit<Profile, 'photoURL'>, newImageFile: File | null) => {
         if (!user) return;
-        
-        const userDocRef = doc(db, 'userData', user.uid);
-        let newPhotoURL = profile?.photoURL || '';
+
+        const newProfileData: Profile = {
+            displayName: updates.displayName,
+            photoURL: profile?.photoURL || '', // Start with the existing photo URL
+            address: updates.address,
+            phoneNumber: updates.phoneNumber,
+            country: updates.country,
+            city: updates.city,
+        };
 
         if (newImageFile) {
             const storageRef = ref(storage, `profile_images/${user.uid}`);
             try {
                 const snapshot = await uploadBytes(storageRef, newImageFile);
-                newPhotoURL = await getDownloadURL(snapshot.ref);
+                newProfileData.photoURL = await getDownloadURL(snapshot.ref);
             } catch (error) {
                 console.error("Error uploading profile image:", error);
                 // Optionally show an error to the user
-                return; 
+                return; // Stop the update if image upload fails
             }
         }
         
-        const currentProfileData = profile || { displayName: '', photoURL: '', address: '', country: '', city: '', phoneNumber: '' };
-        const updatedProfile = { ...currentProfileData, ...updates, photoURL: newPhotoURL };
+        const userDocRef = doc(db, 'userData', user.uid);
         
-        await setDoc(userDocRef, { profile: updatedProfile }, { merge: true });
-
-        setView('home');
-        setActivePortfolioId(null);
+        try {
+            await setDoc(userDocRef, { profile: newProfileData }, { merge: true });
+            setView('home');
+            setActivePortfolioId(null);
+        } catch (error) {
+            console.error("Error saving profile to Firestore:", error);
+            // Optionally show an error to the user that save failed
+        }
     };
 
 
