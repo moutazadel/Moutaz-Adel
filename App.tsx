@@ -1256,27 +1256,40 @@ function App() {
   }, [theme]);
   
   useEffect(() => {
-      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-          if (currentUser) {
-            const userDocRef = doc(db, 'userData', currentUser.uid);
-            const docSnap = await getDoc(userDocRef);
-            if (!docSnap.exists() || !docSnap.data().profile) {
-                const defaultDisplayName = currentUser.email?.split('@')[0] || 'User';
-                const defaultProfile: Profile = { 
-                    displayName: defaultDisplayName, 
-                    photoURL: '',
-                    address: '',
-                    country: '',
-                    city: '',
-                    phoneNumber: ''
-                };
-                await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] }, { merge: true });
-            }
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        try {
+          const userDocRef = doc(db, 'userData', currentUser.uid);
+          const docSnap = await getDoc(userDocRef);
+          if (!docSnap.exists() || !docSnap.data().profile) {
+            const defaultDisplayName = currentUser.email?.split('@')[0] || 'User';
+            const defaultProfile: Profile = {
+              displayName: defaultDisplayName,
+              photoURL: '',
+              address: '',
+              country: '',
+              city: '',
+              phoneNumber: ''
+            };
+            await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] }, { merge: true });
           }
+          // If Firestore operations are successful, set the user.
+          // The other useEffect will handle setting loading to false.
           setUser(currentUser);
-          if (!currentUser) setLoading(false);
-      });
-      return () => unsubscribe();
+        } catch (error) {
+          console.error("Error during user initialization:", error);
+          // If there's an error (e.g., Firestore permissions), sign the user out to prevent a stuck state.
+          await signOut(auth);
+          setUser(null);
+          setLoading(false); // Show login page immediately.
+        }
+      } else {
+        // No user, clear state and stop loading.
+        setUser(null);
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
