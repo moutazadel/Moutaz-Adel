@@ -1328,7 +1328,7 @@ function App() {
     const localSessionId = crypto.randomUUID();
     localStorage.setItem('localSessionId', localSessionId);
     try {
-        await setDoc(doc(db, "userSessions", uid), { sessionId: localSessionId });
+        await setDoc(doc(db, "userSessions", uid), { sessionId: localSessionId }, { merge: true });
     } catch (error) {
         console.error("Failed to set user session:", error);
     }
@@ -1356,7 +1356,6 @@ function App() {
   // Effect 2: Manages all data and session logic based on the user's auth state.
   useEffect(() => {
     if (user) {
-      // User is logged in. Set up listeners for their data.
       let unsubscribeData: Unsubscribe | undefined;
       let unsubscribeSession: Unsubscribe | undefined;
 
@@ -1375,15 +1374,38 @@ function App() {
         console.error("Error listening to session changes:", error);
       });
 
-      // 2. Data listener for portfolios and profile
+      // 2. Data listener for portfolios and profile with self-healing logic
       const userDocRef = doc(db, 'userData', user.uid);
       unsubscribeData = onSnapshot(userDocRef, async (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
+          // Ensure portfolios is always an array
           setPortfolios(data.portfolios && Array.isArray(data.portfolios) ? data.portfolios : []);
-          setProfile(data.profile || null);
+
+          // Robustly handle profile data
+          const profileData = data.profile;
+          const isValidProfile = profileData && typeof profileData === 'object' && !Array.isArray(profileData);
+
+          if (isValidProfile) {
+            setProfile(profileData as Profile);
+          } else {
+            // If profile is missing or malformed, create a default one and merge it back.
+            // This prevents app crashes and self-heals corrupted data.
+            console.warn("User profile is missing or malformed. Resetting to default.");
+            const defaultDisplayName = user.email?.split('@')[0] || 'User';
+            const defaultProfile: Profile = {
+              displayName: defaultDisplayName,
+              photoURL: '', address: '', country: '', city: '', phoneNumber: ''
+            };
+            setProfile(defaultProfile); // Update local state immediately
+            try {
+              await setDoc(userDocRef, { profile: defaultProfile }, { merge: true });
+            } catch (error) {
+              console.error("Error resetting user profile in Firestore:", error);
+            }
+          }
         } else {
-          // If user doc doesn't exist, create it.
+          // If user doc doesn't exist, create it with defaults.
           try {
             const defaultDisplayName = user.email?.split('@')[0] || 'User';
             const defaultProfile: Profile = {
@@ -1391,13 +1413,13 @@ function App() {
               photoURL: '', address: '', country: '', city: '', phoneNumber: ''
             };
             await setDoc(userDocRef, { profile: defaultProfile, portfolios: [] });
-            // Listener will fire again automatically with the new data, so we don't set state here.
+            // The listener will fire again automatically with the new data.
           } catch (error) {
             console.error("Error creating user document:", error);
             await signOut(auth);
           }
         }
-        setLoading(false); // Data is loaded or creation is handled, stop loading.
+        setLoading(false);
       }, async (error) => {
         console.error("Error listening to user data:", error);
         await signOut(auth);
@@ -1412,7 +1434,7 @@ function App() {
       // User is not logged in or has logged out.
       setProfile(null);
       setPortfolios([]);
-      setLoading(false); // Stop loading.
+      setLoading(false);
     }
   }, [user, t]);
 
